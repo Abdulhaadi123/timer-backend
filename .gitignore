@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Build files
+build/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+
+# Prisma
+prisma/.env
+
+# Screenshots (if stored locally)
+screenshots/
+uploads/

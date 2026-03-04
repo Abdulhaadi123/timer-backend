@@ -1,0 +1,728 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                         String                      @id @db.Uuid
+  name                       String                      @db.VarChar(255)
+  timezone                   String                      @db.VarChar(50)
+  is_active                  Boolean
+  createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updated_at                 DateTime                    @default(now()) @db.Timestamptz(6)
+  assets                     assets[]
+  employee_profiles          employee_profiles[]
+  job_postings               job_postings[]
+  leave_types                leave_types[]
+  notifications              notifications[]
+  organization_work_policies organization_work_policies?
+  payroll_runs               payroll_runs[]
+  projects                   Project[]
+  teams                      Team[]
+  user_organization_roles    user_organization_roles[]
+  users                      User[]
+
+  @@index([is_active], map: "idx_organizations_is_active")
+  @@map("organizations")
+}
+
+model User {
+  id                                                              String                    @id @db.Uuid
+  email                                                           String                    @unique(map: "idx_users_email") @db.VarChar(255)
+  passwordHash                                                    String                    @map("password_hash") @db.VarChar(255)
+  fullName                                                        String                    @map("full_name") @db.VarChar(255)
+  isActive                                                        Boolean                   @map("is_active")
+  email_verified                                                  Boolean
+  createdAt                                                       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updated_at                                                      DateTime                  @default(now()) @db.Timestamptz(6)
+  orgId                                                           String?                   @map("org_id") @db.Uuid
+  activitySamples                                                 ActivitySample[]
+  applications_applications_assigned_recruiter_idTousers          applications[]            @relation("applications_assigned_recruiter_idTousers")
+  applications_applications_hired_as_user_idTousers               applications[]            @relation("applications_hired_as_user_idTousers")
+  asset_assignments_asset_assignments_assigned_by_idTousers       asset_assignments[]       @relation("asset_assignments_assigned_by_idTousers")
+  asset_assignments_asset_assignments_user_idTousers              asset_assignments[]       @relation("asset_assignments_user_idTousers")
+  assets                                                          assets[]
+  deviceSessions                                                  DeviceSession[]
+  documents_documents_uploaded_by_idTousers                       documents[]               @relation("documents_uploaded_by_idTousers")
+  documents_documents_user_idTousers                              documents[]               @relation("documents_user_idTousers")
+  documents_documents_verified_by_idTousers                       documents[]               @relation("documents_verified_by_idTousers")
+  employee_profiles_employee_profiles_reporting_manager_idTousers employee_profiles[]       @relation("employee_profiles_reporting_manager_idTousers")
+  employee_profiles_employee_profiles_user_idTousers              employee_profiles?        @relation("employee_profiles_user_idTousers")
+  job_postings                                                    job_postings[]
+  leave_requests_leave_requests_approved_by_idTousers             leave_requests[]          @relation("leave_requests_approved_by_idTousers")
+  leave_requests_leave_requests_employee_idTousers                leave_requests[]          @relation("leave_requests_employee_idTousers")
+  manual_time_requests_manual_time_requests_reviewed_by_idTousers manual_time_requests[]    @relation("manual_time_requests_reviewed_by_idTousers")
+  manual_time_requests_manual_time_requests_user_idTousers        manual_time_requests[]    @relation("manual_time_requests_user_idTousers")
+  notification_recipients                                         notification_recipients[]
+  notifications                                                   notifications[]
+  payroll_run_lines                                               payroll_run_lines[]
+  payroll_runs                                                    payroll_runs[]
+  createdProjects                                                 Project[]
+  refreshTokens                                                   RefreshToken[]
+  salary_history_salary_history_created_by_idTousers              salary_history[]          @relation("salary_history_created_by_idTousers")
+  salary_history_salary_history_user_idTousers                    salary_history[]          @relation("salary_history_user_idTousers")
+  screenshots                                                     Screenshot[]
+  assignedTasks                                                   Task[]                    @relation("AssignedTasks")
+  createdTasks                                                    Task[]                    @relation("CreatedTasks")
+  team_members                                                    team_members[]
+  leadsTeam                                                       Team[]                    @relation("TeamLead")
+  time_adjustments_time_adjustments_created_by_idTousers          time_adjustments[]        @relation("time_adjustments_created_by_idTousers")
+  time_adjustments_time_adjustments_user_idTousers                time_adjustments[]        @relation("time_adjustments_user_idTousers")
+  timeEntries                                                     TimeEntry[]
+  tracker_profiles                                                tracker_profiles?
+  user_leave_balances                                             user_leave_balances[]
+  user_organization_roles                                         user_organization_roles[]
+  organization                                                    Organization?             @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([isActive], map: "idx_users_is_active")
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  token      String    @unique @db.VarChar(500)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expiresAt], map: "idx_refresh_tokens_expires")
+  @@index([userId], map: "idx_refresh_tokens_user")
+  @@map("refresh_tokens")
+}
+
+model DeviceSession {
+  id              String           @id @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  deviceId        String           @map("device_id") @db.VarChar(255)
+  platform        String           @db.VarChar(100)
+  startedAt       DateTime         @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime?        @map("ended_at") @db.Timestamptz(6)
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  activitySamples ActivitySample[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, deviceId, startedAt], map: "uq_device_sessions_user_device_started")
+  @@index([startedAt], map: "idx_device_sessions_started_at")
+  @@index([userId], map: "idx_device_sessions_user")
+  @@map("device_sessions")
+}
+
+model ActivitySample {
+  id              BigInt         @id @default(autoincrement())
+  userId          String         @map("user_id") @db.Uuid
+  deviceSessionId String?        @map("device_session_id") @db.Uuid
+  capturedAt      DateTime       @map("captured_at") @db.Timestamptz(6)
+  mouseDelta      Int            @map("mouse_delta")
+  keyCount        Int            @map("key_count")
+  activeSeconds   Int?           @map("active_seconds")
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  deviceSession   DeviceSession? @relation(fields: [deviceSessionId], references: [id], onUpdate: NoAction)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([deviceSessionId], map: "idx_activity_samples_device_session")
+  @@index([userId, capturedAt], map: "idx_activity_samples_user_captured")
+  @@map("activity_samples")
+}
+
+model TimeEntry {
+  id        BigInt                 @id @default(autoincrement())
+  userId    String                 @map("user_id") @db.Uuid
+  startedAt DateTime               @map("started_at") @db.Timestamptz(6)
+  endedAt   DateTime               @map("ended_at") @db.Timestamptz(6)
+  kind      time_entry_kind_enum
+  source    time_entry_source_enum
+  projectId String?                @map("project_id") @db.Uuid
+  taskId    String?                @map("task_id") @db.Uuid
+  createdAt DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  project   Project?               @relation(fields: [projectId], references: [id], onUpdate: NoAction)
+  task      Task?                  @relation(fields: [taskId], references: [id], onUpdate: NoAction)
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([kind], map: "idx_time_entries_kind")
+  @@index([projectId], map: "idx_time_entries_project")
+  @@index([taskId], map: "idx_time_entries_task")
+  @@index([userId, startedAt], map: "idx_time_entries_user_started")
+  @@map("time_entries")
+}
+
+model Team {
+  id              String         @id @db.Uuid
+  name            String         @db.VarChar(255)
+  organization_id String         @db.Uuid
+  leadId          String?        @map("lead_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updated_at      DateTime       @default(now()) @db.Timestamptz(6)
+  projects        Project[]
+  team_members    team_members[]
+  lead            User?          @relation("TeamLead", fields: [leadId], references: [id], onUpdate: NoAction)
+  organizations   Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([leadId], map: "idx_teams_lead")
+  @@index([organization_id], map: "idx_teams_organization")
+  @@map("teams")
+}
+
+model Project {
+  id              String              @id @db.Uuid
+  name            String              @db.VarChar(255)
+  description     String?
+  color           String?             @db.VarChar(7)
+  organization_id String              @db.Uuid
+  teamId          String?             @map("team_id") @db.Uuid
+  status          project_status_enum
+  createdById     String              @map("created_by_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       User                @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations   Organization        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  team            Team?               @relation(fields: [teamId], references: [id], onUpdate: NoAction)
+  tasks           Task[]
+  timeEntries     TimeEntry[]
+
+  @@index([createdById], map: "idx_projects_created_by")
+  @@index([organization_id], map: "idx_projects_organization")
+  @@index([status], map: "idx_projects_status")
+  @@index([teamId], map: "idx_projects_team")
+  @@map("projects")
+}
+
+model Task {
+  id          String           @id @db.Uuid
+  title       String           @db.VarChar(500)
+  description String?
+  projectId   String           @map("project_id") @db.Uuid
+  assignedTo  String?          @map("assigned_to") @db.Uuid
+  createdById String           @map("created_by_id") @db.Uuid
+  status      task_status_enum
+  priority    priority_enum
+  dueDate     DateTime?        @map("due_date") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  subtasks    subtasks[]
+  assignee    User?            @relation("AssignedTasks", fields: [assignedTo], references: [id], onUpdate: NoAction)
+  createdBy   User             @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timeEntries TimeEntry[]
+
+  @@index([assignedTo], map: "idx_tasks_assigned_to")
+  @@index([dueDate], map: "idx_tasks_due_date")
+  @@index([priority], map: "idx_tasks_priority")
+  @@index([projectId], map: "idx_tasks_project")
+  @@index([status], map: "idx_tasks_status")
+  @@map("tasks")
+}
+
+model Screenshot {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Uuid
+  fileUrl    String   @map("file_url") @db.VarChar(1000)
+  fileSize   Int      @map("file_size")
+  capturedAt DateTime @map("captured_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, capturedAt], map: "idx_screenshots_user_captured")
+  @@map("screenshots")
+}
+
+model applications {
+  id                                              String                  @id @db.Uuid
+  job_posting_id                                  String                  @db.Uuid
+  candidate_name                                  String                  @db.VarChar(255)
+  candidate_email                                 String                  @db.VarChar(255)
+  candidate_phone                                 String?                 @db.VarChar(20)
+  resume_file_path                                String?                 @db.VarChar(1000)
+  resume_text                                     String?
+  cover_letter                                    String?
+  status                                          application_status_enum
+  applied_at                                      DateTime                @db.Timestamptz(6)
+  assigned_recruiter_id                           String?                 @db.Uuid
+  hired_as_user_id                                String?                 @db.Uuid
+  candidate_data                                  Json?
+  evaluation_data                                 Json?
+  created_at                                      DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime                @default(now()) @db.Timestamptz(6)
+  users_applications_assigned_recruiter_idTousers User?                   @relation("applications_assigned_recruiter_idTousers", fields: [assigned_recruiter_id], references: [id], onUpdate: NoAction)
+  users_applications_hired_as_user_idTousers      User?                   @relation("applications_hired_as_user_idTousers", fields: [hired_as_user_id], references: [id], onUpdate: NoAction)
+  job_postings                                    job_postings            @relation(fields: [job_posting_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([job_posting_id, candidate_email], map: "uq_applications_job_candidate_email")
+  @@index([applied_at], map: "idx_applications_applied_at")
+  @@index([candidate_email], map: "idx_applications_candidate_email")
+  @@index([hired_as_user_id], map: "idx_applications_hired_as_user")
+  @@index([job_posting_id, status], map: "idx_applications_job_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model asset_assignments {
+  id                                            String    @id @db.Uuid
+  asset_id                                      String    @db.Uuid
+  user_id                                       String    @db.Uuid
+  assigned_at                                   DateTime  @db.Timestamptz(6)
+  assigned_by_id                                String?   @db.Uuid
+  returned_at                                   DateTime? @db.Timestamptz(6)
+  notes                                         String?
+  created_at                                    DateTime  @default(now()) @db.Timestamptz(6)
+  assets                                        assets    @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_asset_assignments_assigned_by_idTousers User?     @relation("asset_assignments_assigned_by_idTousers", fields: [assigned_by_id], references: [id], onUpdate: NoAction)
+  users_asset_assignments_user_idTousers        User      @relation("asset_assignments_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([asset_id, assigned_at], map: "idx_asset_assignments_asset_assigned")
+  @@index([user_id, returned_at], map: "idx_asset_assignments_user_returned")
+}
+
+model assets {
+  id                String              @id @db.Uuid
+  organization_id   String              @db.Uuid
+  name              String              @db.VarChar(255)
+  category          String              @db.VarChar(50)
+  serial_number     String?             @unique @db.VarChar(100)
+  status            asset_status_enum
+  current_holder_id String?             @db.Uuid
+  purchase_date     DateTime?           @db.Date
+  purchase_cost     Decimal?            @db.Decimal(12, 2)
+  meta_data         Json?
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  asset_assignments asset_assignments[]
+  users             User?               @relation(fields: [current_holder_id], references: [id], onUpdate: NoAction)
+  organizations     Organization        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([category], map: "idx_assets_category")
+  @@index([current_holder_id], map: "idx_assets_current_holder")
+  @@index([organization_id, status], map: "idx_assets_organization_status")
+}
+
+model documents {
+  id                                    String    @id @db.Uuid
+  user_id                               String    @db.Uuid
+  document_type                         String    @db.VarChar(100)
+  file_name                             String    @db.VarChar(255)
+  file_path                             String    @db.VarChar(1000)
+  file_size                             Int
+  mime_type                             String?   @db.VarChar(100)
+  uploaded_by_id                        String    @db.Uuid
+  uploaded_at                           DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at                            DateTime? @db.Timestamptz(6)
+  is_verified                           Boolean
+  verified_by_id                        String?   @db.Uuid
+  verified_at                           DateTime? @db.Timestamptz(6)
+  users_documents_uploaded_by_idTousers User      @relation("documents_uploaded_by_idTousers", fields: [uploaded_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_documents_user_idTousers        User      @relation("documents_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_documents_verified_by_idTousers User?     @relation("documents_verified_by_idTousers", fields: [verified_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([document_type], map: "idx_documents_type")
+  @@index([user_id], map: "idx_documents_user")
+}
+
+model employee_profiles {
+  user_id                                             String       @id @db.Uuid
+  organization_id                                     String       @db.Uuid
+  employee_number                                     String?      @unique @db.VarChar(50)
+  phone_number                                        String?      @db.VarChar(20)
+  national_id                                         String?      @unique @db.VarChar(50)
+  designation                                         String?      @db.VarChar(255)
+  reporting_manager_id                                String?      @db.Uuid
+  avatar_path                                         String?      @db.VarChar(500)
+  date_of_joining                                     DateTime     @db.Date
+  date_of_leaving                                     DateTime?    @db.Date
+  created_at                                          DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at                                          DateTime     @default(now()) @db.Timestamptz(6)
+  organizations                                       Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_employee_profiles_reporting_manager_idTousers User?        @relation("employee_profiles_reporting_manager_idTousers", fields: [reporting_manager_id], references: [id], onUpdate: NoAction)
+  users_employee_profiles_user_idTousers              User         @relation("employee_profiles_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([designation], map: "idx_employee_profiles_designation")
+  @@index([reporting_manager_id], map: "idx_employee_profiles_manager")
+  @@index([organization_id], map: "idx_employee_profiles_org")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model job_postings {
+  id               String          @id @db.Uuid
+  organization_id  String          @db.Uuid
+  title            String          @db.VarChar(255)
+  department       String?         @db.VarChar(100)
+  designation      String?         @db.VarChar(255)
+  description      String
+  requirements     String?
+  employment_type  String?         @db.VarChar(20)
+  salary_range_min Decimal?        @db.Decimal(12, 2)
+  salary_range_max Decimal?        @db.Decimal(12, 2)
+  status           job_status_enum
+  posted_by_id     String?         @db.Uuid
+  posted_at        DateTime?       @db.Timestamptz(6)
+  closes_at        DateTime?       @db.Timestamptz(6)
+  headcount        Int
+  filled_positions Int
+  meta_data        Json?
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime        @default(now()) @db.Timestamptz(6)
+  applications     applications[]
+  organizations    Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            User?           @relation(fields: [posted_by_id], references: [id], onUpdate: NoAction)
+
+  @@index([organization_id, status], map: "idx_job_postings_organization_status")
+  @@index([posted_at], map: "idx_job_postings_posted_at")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model leave_requests {
+  id                                         String            @id @db.Uuid
+  employee_id                                String            @db.Uuid
+  leave_type_id                              String            @db.Uuid
+  start_date                                 DateTime          @db.Date
+  end_date                                   DateTime          @db.Date
+  total_days                                 Decimal           @db.Decimal(5, 2)
+  reason                                     String?
+  status                                     leave_status_enum
+  approved_by_id                             String?           @db.Uuid
+  manager_comments                           String?
+  hr_comments                                String?
+  created_at                                 DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                                 DateTime          @default(now()) @db.Timestamptz(6)
+  users_leave_requests_approved_by_idTousers User?             @relation("leave_requests_approved_by_idTousers", fields: [approved_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leave_requests_employee_idTousers    User              @relation("leave_requests_employee_idTousers", fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leave_types                                leave_types       @relation(fields: [leave_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([start_date, end_date], map: "idx_leave_requests_dates")
+  @@index([employee_id], map: "idx_leave_requests_employee")
+  @@index([status], map: "idx_leave_requests_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model leave_types {
+  id                   String                @id @db.Uuid
+  organization_id      String                @db.Uuid
+  name                 String                @db.VarChar(100)
+  code                 String                @db.VarChar(20)
+  annual_quota         Int
+  is_paid              Boolean
+  requires_approval    Boolean
+  max_consecutive_days Int?
+  description          String?
+  created_at           DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime              @default(now()) @db.Timestamptz(6)
+  leave_requests       leave_requests[]
+  organizations        Organization          @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user_leave_balances  user_leave_balances[]
+
+  @@unique([organization_id, code], map: "uq_leave_types_org_code")
+  @@index([organization_id], map: "idx_leave_types_org")
+}
+
+model manual_time_requests {
+  id                                               String                          @id @db.Uuid
+  user_id                                          String                          @db.Uuid
+  start_time                                       DateTime                        @db.Timestamptz(6)
+  end_time                                         DateTime                        @db.Timestamptz(6)
+  minutes                                          Int
+  reason                                           String
+  type                                             time_entry_kind_enum
+  status                                           manual_time_request_status_enum
+  reviewed_by_id                                   String?                         @db.Uuid
+  reviewed_at                                      DateTime?                       @db.Timestamptz(6)
+  review_note                                      String?
+  created_at                                       DateTime                        @default(now()) @db.Timestamptz(6)
+  users_manual_time_requests_reviewed_by_idTousers User?                           @relation("manual_time_requests_reviewed_by_idTousers", fields: [reviewed_by_id], references: [id], onUpdate: NoAction)
+  users_manual_time_requests_user_idTousers        User                            @relation("manual_time_requests_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status], map: "idx_manual_time_requests_status")
+  @@index([user_id, status], map: "idx_manual_time_requests_user_status")
+}
+
+model notification_recipients {
+  notification_id String        @db.Uuid
+  user_id         String        @db.Uuid
+  read_at         DateTime?     @db.Timestamptz(6)
+  notifications   notifications @relation(fields: [notification_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           User          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([notification_id, user_id])
+  @@index([notification_id], map: "idx_notification_recipients_notification")
+}
+
+model notifications {
+  id                      String                     @id @db.Uuid
+  organization_id         String                     @db.Uuid
+  title                   String                     @db.VarChar(500)
+  description             String?
+  sender_id               String                     @db.Uuid
+  priority                notification_priority_enum
+  is_active               Boolean
+  created_at              DateTime                   @default(now()) @db.Timestamptz(6)
+  expires_at              DateTime?                  @db.Timestamptz(6)
+  notification_recipients notification_recipients[]
+  organizations           Organization               @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User                       @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_notifications_created")
+  @@index([organization_id], map: "idx_notifications_org")
+}
+
+model organization_work_policies {
+  organization_id            String       @id @db.Uuid
+  shift_start                DateTime     @db.Time(6)
+  shift_end                  DateTime     @db.Time(6)
+  break_start                DateTime?    @db.Time(6)
+  break_end                  DateTime?    @db.Time(6)
+  timezone                   String       @db.VarChar(50)
+  standard_daily_minutes     Int
+  grace_period_minutes       Int
+  idle_threshold_seconds     Int
+  overtime_threshold_minutes Int
+  absence_threshold_minutes  Int
+  created_at                 DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime     @default(now()) @db.Timestamptz(6)
+  organizations              Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payroll_run_lines {
+  id                      String       @id @db.Uuid
+  payroll_run_id          String       @db.Uuid
+  user_id                 String       @db.Uuid
+  base_salary             Decimal      @db.Decimal(12, 2)
+  total_work_minutes      Int
+  payable_minutes         Int
+  overtime_minutes        Int
+  late_minutes            Int
+  early_departure_minutes Int
+  absent_days             Int
+  gross_pay               Decimal      @db.Decimal(12, 2)
+  overtime_pay            Decimal      @db.Decimal(12, 2)
+  deductions              Decimal      @db.Decimal(12, 2)
+  bonuses                 Decimal      @db.Decimal(12, 2)
+  allowances              Decimal      @db.Decimal(12, 2)
+  other_deductions        Decimal      @db.Decimal(12, 2)
+  net_pay                 Decimal      @db.Decimal(12, 2)
+  adjustments             Json?
+  time_entry_ids          BigInt[]
+  notes                   String?
+  created_at              DateTime     @default(now()) @db.Timestamptz(6)
+  payroll_runs            payroll_runs @relation(fields: [payroll_run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([payroll_run_id, user_id], map: "uq_payroll_run_lines_run_user")
+  @@index([payroll_run_id], map: "idx_payroll_run_lines_run")
+  @@index([user_id], map: "idx_payroll_run_lines_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payroll_runs {
+  id                String                  @id @db.Uuid
+  organization_id   String                  @db.Uuid
+  month             Int
+  year              Int
+  period_start      DateTime                @db.Date
+  period_end        DateTime                @db.Date
+  generated_by_id   String                  @db.Uuid
+  source_checksum   String                  @db.VarChar(64)
+  status            payroll_run_status_enum
+  finalized_at      DateTime?               @db.Timestamptz(6)
+  created_at        DateTime                @default(now()) @db.Timestamptz(6)
+  payroll_run_lines payroll_run_lines[]
+  users             User                    @relation(fields: [generated_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizations     Organization            @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, month, year], map: "uq_payroll_runs_org_month_year")
+  @@index([organization_id], map: "idx_payroll_runs_org")
+  @@index([year, month], map: "idx_payroll_runs_period")
+  @@index([status], map: "idx_payroll_runs_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model salary_history {
+  id                                        String    @id @db.Uuid
+  user_id                                   String    @db.Uuid
+  amount                                    Decimal   @db.Decimal(12, 2)
+  currency                                  String    @db.VarChar(3)
+  effective_from                            DateTime  @db.Date
+  effective_to                              DateTime? @db.Date
+  created_by_id                             String    @db.Uuid
+  notes                                     String?
+  created_at                                DateTime  @default(now()) @db.Timestamptz(6)
+  users_salary_history_created_by_idTousers User      @relation("salary_history_created_by_idTousers", fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_salary_history_user_idTousers       User      @relation("salary_history_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([effective_from, effective_to], map: "idx_salary_history_effective")
+  @@index([user_id, effective_from], map: "idx_salary_history_user")
+}
+
+model subtasks {
+  id         String   @id @db.Uuid
+  task_id    String   @db.Uuid
+  title      String   @db.VarChar(500)
+  completed  Boolean
+  sort_order Int
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  tasks      Task     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([task_id], map: "idx_subtasks_task")
+}
+
+model team_members {
+  team_id   String   @db.Uuid
+  user_id   String   @db.Uuid
+  joined_at DateTime @default(now()) @db.Timestamptz(6)
+  teams     Team     @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users     User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([team_id, user_id])
+  @@index([user_id], map: "idx_team_members_user")
+}
+
+model time_adjustments {
+  id                                          BigInt   @id @default(autoincrement())
+  user_id                                     String   @db.Uuid
+  created_by_id                               String   @db.Uuid
+  reason                                      String
+  delta_minutes                               Int
+  effective_date                              DateTime @db.Date
+  created_at                                  DateTime @default(now()) @db.Timestamptz(6)
+  users_time_adjustments_created_by_idTousers User     @relation("time_adjustments_created_by_idTousers", fields: [created_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_time_adjustments_user_idTousers       User     @relation("time_adjustments_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_by_id], map: "idx_time_adjustments_created_by")
+  @@index([user_id, effective_date], map: "idx_time_adjustments_user_date")
+}
+
+model tracker_profiles {
+  user_id               String    @id @db.Uuid
+  screenshot_enabled    Boolean
+  custom_schedule_start DateTime? @db.Time(6)
+  custom_schedule_end   DateTime? @db.Time(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+  users                 User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model user_leave_balances {
+  id              String      @id @db.Uuid
+  user_id         String      @db.Uuid
+  leave_type_id   String      @db.Uuid
+  year            Int
+  total_allocated Decimal     @db.Decimal(5, 2)
+  used            Decimal     @db.Decimal(5, 2)
+  remaining       Decimal?    @default(dbgenerated("(total_allocated - used)")) @db.Decimal(5, 2)
+  carried_over    Decimal     @db.Decimal(5, 2)
+  created_at      DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime    @default(now()) @db.Timestamptz(6)
+  leave_types     leave_types @relation(fields: [leave_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           User        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, leave_type_id, year], map: "uq_user_leave_balances_user_type_year")
+  @@index([user_id, year], map: "idx_user_leave_balances_user_year")
+}
+
+model user_organization_roles {
+  user_id         String         @db.Uuid
+  organization_id String         @db.Uuid
+  role            user_role_enum
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime       @default(now()) @db.Timestamptz(6)
+  organizations   Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           User           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, organization_id])
+  @@index([organization_id], map: "idx_user_org_roles_org")
+  @@index([role], map: "idx_user_org_roles_role")
+}
+
+enum application_status_enum {
+  APPLIED
+  SCREENING
+  INTERVIEWING
+  OFFERED
+  REJECTED
+  HIRED
+  WITHDRAWN
+}
+
+enum asset_status_enum {
+  AVAILABLE
+  ASSIGNED
+  MAINTENANCE
+  RETIRED
+}
+
+enum job_status_enum {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum leave_status_enum {
+  PENDING
+  MANAGER_APPROVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum manual_time_request_status_enum {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum notification_priority_enum {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum payroll_run_status_enum {
+  DRAFT
+  FINALIZED
+  PAID
+}
+
+enum priority_enum {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum project_status_enum {
+  ACTIVE
+  ARCHIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum task_status_enum {
+  TODO
+  PENDING
+  IN_PROGRESS
+  DEVELOPMENT_QA
+  COMPLETED
+  BLOCKED
+}
+
+enum time_entry_kind_enum {
+  ACTIVE
+  IDLE
+  BREAK
+}
+
+enum time_entry_source_enum {
+  AUTO
+  MANUAL
+}
+
+enum user_role_enum {
+  OWNER
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
