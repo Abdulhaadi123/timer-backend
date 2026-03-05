@@ -18,6 +18,7 @@ Thumbs.db
 # Prisma
 prisma/.env
 
-# Screenshots (if stored locally)
-screenshots/
-uploads/
+# Downloads (keep folder, ignore exe files)
+public/downloads/*.exe
+public/downloads/*.dmg
+public/downloads/*.zip

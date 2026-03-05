@@ -21,6 +21,12 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // Serve static files from public/downloads directory
+  const downloadsPath = join(__dirname, '..', 'public', 'downloads');
+  app.useStaticAssets(downloadsPath, {
+    prefix: '/downloads',
+  });
+
   // Serve screenshots from public/screenshots directory
   const screenshotsPath = join(__dirname, '..', 'public', 'screenshots');
   app.useStaticAssets(screenshotsPath, {
@@ -39,6 +45,7 @@ async function bootstrap() {
   await app.listen(port);
 
   console.log(`🚀 Backend API running on http://localhost:${port}/api`);
+  console.log(`📦 Downloads available at http://localhost:${port}/downloads/`);
   console.log(`📸 Screenshots available at http://localhost:${port}/screenshots/`);
 }
 
