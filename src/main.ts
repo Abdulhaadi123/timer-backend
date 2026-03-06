@@ -8,6 +8,7 @@ import * as bodyParser from 'body-parser';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
   // 50MB limit for screenshot uploads (MUST be before CORS)
@@ -20,6 +21,13 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
+
+  // Log all incoming requests
+  app.use((req, res, next) => {
+    console.log(`📥 ${req.method} ${req.url}`);
+    console.log(`🔑 Authorization: ${req.headers.authorization ? req.headers.authorization.substring(0, 30) + '...' : 'NONE'}`);
+    next();
+  });
 
   // Serve static files from public/downloads directory
   const downloadsPath = join(__dirname, '..', 'public', 'downloads');
