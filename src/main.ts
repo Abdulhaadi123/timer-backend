@@ -6,6 +6,11 @@ import { join } from 'path';
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
+  console.log('🔍 Environment check:');
+  console.log('  JWT_SECRET:', process.env.JWT_SECRET ? 'Loaded' : 'NOT LOADED');
+  console.log('  NODE_ENV:', process.env.NODE_ENV);
+  console.log('  PORT:', process.env.PORT);
+  
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
@@ -52,6 +57,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3001;
   await app.listen(port);
 
+  console.log(`🔐 JWT_SECRET loaded: ${process.env.JWT_SECRET ? 'YES' : 'NO'}`);
   console.log(`🚀 Backend API running on http://localhost:${port}/api`);
   console.log(`📦 Downloads available at http://localhost:${port}/downloads/`);
   console.log(`📸 Screenshots available at http://localhost:${port}/screenshots/`);
