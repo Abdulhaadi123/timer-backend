@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { RollupService } from './rollup.service';
 import { isWithinCheckinWindow, isWithinBreakWindow } from '../shared/utils';
+import { randomUUID } from 'crypto';
 
 interface ActivityBatchItem {
   capturedAt: string;
@@ -48,7 +49,7 @@ export class ActivityService {
 
     const session = await this.prisma.deviceSession.create({
       data: { 
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         userId, 
         deviceId, 
         platform, 
