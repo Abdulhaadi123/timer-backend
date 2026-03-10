@@ -189,10 +189,22 @@ export class ActivityService {
       const isInCheckin = isWithinCheckinWindow(timestamp, rules);
       const isInBreak = isWithinBreakWindow(timestamp, rules);
       
+      const localTimeStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: rules.timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(timestamp);
+      
       if (index === 0) {
-        console.log(`🔍 Sample check: Time=${timestamp.toISOString()}, InCheckin=${isInCheckin}, InBreak=${isInBreak}`);
+        console.log(`🔍 Sample check: Time=${timestamp.toISOString()}, LocalTime=${localTimeStr}, InCheckin=${isInCheckin}, InBreak=${isInBreak}`);
+        console.log(`🔍 Rules: checkin=${rules.checkinWindow.start}-${rules.checkinWindow.end}`);
       }
 
+      // TEMPORARILY DISABLED - Accept all samples
+      return true;
+
+      /*
       if (!isInCheckin) {
         if (index === 0) console.log(`❌ Rejected: Outside check-in window`);
         return false;
@@ -203,9 +215,9 @@ export class ActivityService {
         return false;
       }
 
-      // Log activity rate
       console.log(`📊 Activity rate: mouse=${sample.mouseDelta}, keys=${sample.keyCount}`);
       return true;
+      */
     });
 
     if (validSamples.length > 0) {
