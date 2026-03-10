@@ -10,7 +10,7 @@ import { LocalStrategy } from './strategies/local.strategy';
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: 'your-super-secret-jwt-key-change-in-production',
+      secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
       signOptions: { expiresIn: '1d' },
     }),
   ],

@@ -23,6 +23,51 @@ export class ActivityService {
   ) {}
 
   async startSession(userId: string, deviceId: string, platform: string) {
+    // Check if current time is within check-in window
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { 
+        organization: { 
+          include: { organization_work_policies: true } 
+        },
+        tracker_profiles: true,
+      },
+    });
+
+    if (!user || !user.organization.organization_work_policies) {
+      throw new BadRequestException('User or organization policy not found');
+    }
+
+    const policy = user.organization.organization_work_policies;
+    const trackerProfile = user.tracker_profiles;
+    
+    const formatTime = (time: Date | null) => {
+      if (!time) return null;
+      const hours = time.getUTCHours().toString().padStart(2, '0');
+      const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    };
+    
+    const rules = {
+      timezone: policy.timezone,
+      checkinWindow: {
+        start: trackerProfile?.custom_schedule_start ? formatTime(trackerProfile.custom_schedule_start) : formatTime(policy.shift_start) || '09:00',
+        end: trackerProfile?.custom_schedule_end ? formatTime(trackerProfile.custom_schedule_end) : formatTime(policy.shift_end) || '18:00',
+      },
+      breakWindow: {
+        start: formatTime(policy.break_start) || '12:00',
+        end: formatTime(policy.break_end) || '13:00',
+      },
+      idleThresholdSeconds: policy.idle_threshold_seconds,
+    };
+
+    const now = new Date();
+    const isInCheckin = isWithinCheckinWindow(now, rules);
+    
+    if (!isInCheckin) {
+      throw new BadRequestException(`Tracking can only be started during office hours (${rules.checkinWindow.start} - ${rules.checkinWindow.end})`);
+    }
+
     const existingSessions = await this.prisma.deviceSession.findMany({
       where: { userId, deviceId, endedAt: null },
     });

@@ -5,8 +5,8 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
-    const secret = 'your-super-secret-jwt-key-change-in-production';
-    console.log('🔑 JwtStrategy using HARDCODED secret for testing');
+    const secret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    console.log('🔑 JwtStrategy initialized with secret from env');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
