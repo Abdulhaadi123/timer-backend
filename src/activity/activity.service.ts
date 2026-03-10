@@ -43,8 +43,8 @@ export class ActivityService {
     
     const formatTime = (time: Date | null) => {
       if (!time) return null;
-      const hours = time.getUTCHours().toString().padStart(2, '0');
-      const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+      const hours = time.getHours().toString().padStart(2, '0');
+      const minutes = time.getMinutes().toString().padStart(2, '0');
       return `${hours}:${minutes}`;
     };
     
@@ -164,8 +164,8 @@ export class ActivityService {
     
     const formatTime = (time: Date | null) => {
       if (!time) return null;
-      const hours = time.getUTCHours().toString().padStart(2, '0');
-      const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+      const hours = time.getHours().toString().padStart(2, '0');
+      const minutes = time.getMinutes().toString().padStart(2, '0');
       return `${hours}:${minutes}`;
     };
     
