@@ -49,7 +49,7 @@ export class ActivityService {
     };
     
     const rules = {
-      timezone: policy.timezone,
+      timezone: user.organization.timezone,
       checkinWindow: {
         start: trackerProfile?.custom_schedule_start ? formatTime(trackerProfile.custom_schedule_start) : formatTime(policy.shift_start) || '09:00',
         end: trackerProfile?.custom_schedule_end ? formatTime(trackerProfile.custom_schedule_end) : formatTime(policy.shift_end) || '18:00',
@@ -170,7 +170,7 @@ export class ActivityService {
     };
     
     const rules = {
-      timezone: policy.timezone,
+      timezone: user.organization.timezone,
       checkinWindow: {
         start: trackerProfile?.custom_schedule_start ? formatTime(trackerProfile.custom_schedule_start) : formatTime(policy.shift_start) || '09:00',
         end: trackerProfile?.custom_schedule_end ? formatTime(trackerProfile.custom_schedule_end) : formatTime(policy.shift_end) || '18:00',
