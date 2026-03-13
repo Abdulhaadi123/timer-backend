@@ -472,7 +472,6 @@ model organization_work_policies {
   shift_end                  DateTime     @db.Time(6)
   break_start                DateTime?    @db.Time(6)
   break_end                  DateTime?    @db.Time(6)
-  timezone                   String       @db.VarChar(50)
   standard_daily_minutes     Int
   grace_period_minutes       Int
   idle_threshold_seconds     Int
