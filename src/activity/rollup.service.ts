@@ -20,7 +20,9 @@ export class RollupService {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { 
-          organization: true,
+          organization: { 
+            include: { organization_work_policies: true } 
+          },
           tracker_profiles: true,
         },
       });
@@ -30,9 +32,7 @@ export class RollupService {
         return;
       }
 
-      const workPolicy = await this.prisma.organization_work_policies.findFirst({
-        where: { organization_id: user.orgId },
-      });
+      const workPolicy = user.organization.organization_work_policies;
 
       if (!workPolicy) {
         console.error('❌ Work policy not configured for organization:', user.orgId);
@@ -49,7 +49,7 @@ export class RollupService {
       };
       
       const rules = {
-        timezone: workPolicy.timezone || 'UTC',
+        timezone: user.organization.timezone || 'UTC',
         checkinWindow: {
           start: trackerProfile?.custom_schedule_start ? formatTime(trackerProfile.custom_schedule_start) : formatTime(workPolicy.shift_start) || '09:00',
           end: trackerProfile?.custom_schedule_end ? formatTime(trackerProfile.custom_schedule_end) : formatTime(workPolicy.shift_end) || '18:00',
