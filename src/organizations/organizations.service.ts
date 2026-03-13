@@ -17,6 +17,7 @@ export class OrganizationsService {
     
     const workPolicy = await this.prisma.organization_work_policies.findFirst({
       where: { organization_id: orgId },
+      include: { organizations: { select: { timezone: true } } },
     });
 
     console.log('📋 Work policy found:', workPolicy ? 'Yes' : 'No');
@@ -34,7 +35,7 @@ export class OrganizationsService {
     }
 
     return {
-      tz: workPolicy.timezone || 'UTC',
+      tz: workPolicy.organizations?.timezone || 'UTC',
       checkinStart: workPolicy.shift_start?.toString() || '09:00',
       checkinEnd: workPolicy.shift_end?.toString() || '18:00',
       breakStart: workPolicy.break_start?.toString() || '12:00',
