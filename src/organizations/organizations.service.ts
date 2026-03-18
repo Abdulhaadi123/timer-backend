@@ -31,6 +31,7 @@ export class OrganizationsService {
         breakStart: '12:00',
         breakEnd: '13:00',
         idleThresholdSeconds: 300,
+        screenshotIntervalMinutes: 10,
       };
     }
 
@@ -41,6 +42,7 @@ export class OrganizationsService {
       breakStart: workPolicy.break_start?.toString() || '12:00',
       breakEnd: workPolicy.break_end?.toString() || '13:00',
       idleThresholdSeconds: workPolicy.idle_threshold_seconds || 300,
+      screenshotIntervalMinutes: workPolicy.screenshot_interval_minutes || 10,
     };
   }
 }

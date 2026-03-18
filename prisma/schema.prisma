@@ -470,17 +470,18 @@ model notifications {
 }
 
 model organization_work_policies {
-  organization_id        String       @id @db.Uuid
-  shift_start            DateTime     @db.Time(6)
-  shift_end              DateTime     @db.Time(6)
-  break_start            DateTime?    @db.Time(6)
-  break_end              DateTime?    @db.Time(6)
-  weekly_off_days        String[]
-  grace_period_minutes   Int
-  idle_threshold_seconds Int
-  created_at             DateTime     @default(now()) @db.Timestamptz(6)
-  updated_at             DateTime     @default(now()) @db.Timestamptz(6)
-  organizations          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_id             String       @id @db.Uuid
+  shift_start                 DateTime     @db.Time(6)
+  shift_end                   DateTime     @db.Time(6)
+  break_start                 DateTime?    @db.Time(6)
+  break_end                   DateTime?    @db.Time(6)
+  weekly_off_days             String[]
+  grace_period_minutes        Int
+  idle_threshold_seconds      Int
+  screenshot_interval_minutes Int          @default(10)
+  created_at                  DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime     @default(now()) @db.Timestamptz(6)
+  organizations               Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
