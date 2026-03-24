@@ -295,6 +295,13 @@ export class ActivityService {
     // Use UTC midnight for consistent date filtering
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     
+    // Get user's organization timezone
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { organization: true },
+    });
+    const timezone = user?.organization?.timezone || 'UTC';
+    
     // Get today's check-in/checkout times from device_sessions
     const todaySession = await this.prisma.deviceSession.findFirst({
       where: {
@@ -326,12 +333,19 @@ export class ActivityService {
       if (entry.kind === 'ACTIVE') {
         activeSeconds += duration;
         
-        // Calculate hourly breakdown for ACTIVE entries in minutes
+        // Calculate hourly breakdown for ACTIVE entries in minutes using organization timezone
         let current = new Date(entry.startedAt);
         const end = new Date(entry.endedAt);
         
         while (current < end) {
-          const hour = current.getHours();
+          // Get hour in organization timezone
+          const hourStr = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: '2-digit',
+            hour12: false,
+          }).format(current);
+          const hour = parseInt(hourStr);
+          
           const nextHour = new Date(current);
           nextHour.setHours(hour + 1, 0, 0, 0);
           
