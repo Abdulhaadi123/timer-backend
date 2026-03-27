@@ -6,7 +6,7 @@ import { startOfMinute, addMinutes } from 'date-fns';
 interface MinuteBucket {
   start: Date;
   end: Date;
-  samples: Array<{ mouseDelta: number; keyCount: number }>;
+  samples: Array<{ mouseDelta: number; keyCount: number; activeSeconds?: number }>;
 }
 
 @Injectable()
@@ -85,7 +85,11 @@ export class RollupService {
         if (!isWithinCheckinWindow(bucket.start, rules)) continue;
         if (isWithinBreakWindow(bucket.start, rules)) continue;
 
-        const active = bucket.samples.some((s) => hasActivity(s.mouseDelta, s.keyCount));
+        // Check activity using activeSeconds field (more accurate) or fallback to mouse/key
+        const active = bucket.samples.some((s) => 
+          (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
+          hasActivity(s.mouseDelta, s.keyCount)
+        );
         minuteEntries.push({
           userId,
           startedAt: bucket.start,
@@ -129,32 +133,45 @@ export class RollupService {
             },
           });
 
+          // Collect all operations to execute in batch
+          const toDelete: bigint[] = [];
+          const toCreate: any[] = [];
+
           for (const conflict of conflicting) {
-            await tx.timeEntry.delete({ where: { id: conflict.id } });
+            toDelete.push(conflict.id);
 
             if (conflict.startedAt < newEntry.startedAt) {
-              await tx.timeEntry.create({
-                data: {
-                  userId,
-                  startedAt: conflict.startedAt,
-                  endedAt: newEntry.startedAt,
-                  kind: conflict.kind,
-                  source: 'AUTO',
-                },
+              toCreate.push({
+                userId,
+                startedAt: conflict.startedAt,
+                endedAt: newEntry.startedAt,
+                kind: conflict.kind,
+                source: 'AUTO',
               });
             }
 
             if (conflict.endedAt > newEntry.endedAt) {
-              await tx.timeEntry.create({
-                data: {
-                  userId,
-                  startedAt: newEntry.endedAt,
-                  endedAt: conflict.endedAt,
-                  kind: conflict.kind,
-                  source: 'AUTO',
-                },
+              toCreate.push({
+                userId,
+                startedAt: newEntry.endedAt,
+                endedAt: conflict.endedAt,
+                kind: conflict.kind,
+                source: 'AUTO',
               });
             }
+          }
+
+          // Execute deletes and creates in batch (atomic)
+          if (toDelete.length > 0) {
+            await tx.timeEntry.deleteMany({
+              where: { id: { in: toDelete } },
+            });
+          }
+
+          if (toCreate.length > 0) {
+            await tx.timeEntry.createMany({
+              data: toCreate,
+            });
           }
 
           const overlappingSameKind = await tx.timeEntry.findMany({
@@ -227,6 +244,7 @@ export class RollupService {
       buckets.get(key)!.samples.push({
         mouseDelta: sample.mouseDelta,
         keyCount: sample.keyCount,
+        activeSeconds: (sample as any).activeSeconds,
       });
     }
 
