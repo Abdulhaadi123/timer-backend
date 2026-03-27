@@ -344,13 +344,14 @@ export class ActivityService {
         }
         
         while (current < end) {
-          // Get hour in organization timezone
-          const hourStr = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            hour: '2-digit',
-            hour12: false,
-          }).format(current);
-          const hour = parseInt(hourStr);
+          try {
+            // Get hour in organization timezone
+            const hourStr = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              hour: '2-digit',
+              hour12: false,
+            }).format(current);
+            const hour = parseInt(hourStr);
           
           // Get current time components in organization timezone
           const tzFormatter = new Intl.DateTimeFormat('en-US', {
@@ -439,6 +440,10 @@ export class ActivityService {
           }
           
           current = segmentEnd;
+          } catch (error) {
+            console.error('❌ Error processing hourly data:', error.message, 'current:', current.toISOString());
+            break; // Exit loop on any error
+          }
         }
       } else if (entry.kind === 'IDLE') {
         idleSeconds += duration;
