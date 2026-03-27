@@ -337,6 +337,12 @@ export class ActivityService {
         let current = new Date(entry.startedAt);
         const end = new Date(entry.endedAt);
         
+        // Validate dates
+        if (isNaN(current.getTime()) || isNaN(end.getTime())) {
+          console.error('❌ Invalid date in time entry:', { startedAt: entry.startedAt, endedAt: entry.endedAt });
+          continue; // Skip this entry
+        }
+        
         while (current < end) {
           // Get hour in organization timezone
           const hourStr = new Intl.DateTimeFormat('en-US', {
@@ -359,9 +365,18 @@ export class ActivityService {
           });
           
           const parts = tzFormatter.formatToParts(current);
-          const year = parts.find(p => p.type === 'year').value;
-          const month = parts.find(p => p.type === 'month').value;
-          const day = parts.find(p => p.type === 'day').value;
+          const yearPart = parts.find(p => p.type === 'year');
+          const monthPart = parts.find(p => p.type === 'month');
+          const dayPart = parts.find(p => p.type === 'day');
+          
+          if (!yearPart || !monthPart || !dayPart) {
+            console.error('❌ formatToParts failed for date:', current.toISOString(), 'timezone:', timezone);
+            break; // Exit loop for this entry
+          }
+          
+          const year = yearPart.value;
+          const month = monthPart.value;
+          const day = dayPart.value;
           
           // Create next hour boundary string in organization timezone
           const nextHourStr = `${month}/${day}/${year}, ${(hour + 1).toString().padStart(2, '0')}:00:00`;
@@ -373,10 +388,20 @@ export class ActivityService {
           
           // Get the actual UTC time for next hour in organization timezone
           const nextHourParts = tzFormatter.formatToParts(tzDate);
-          const nextYear = nextHourParts.find(p => p.type === 'year').value;
-          const nextMonth = nextHourParts.find(p => p.type === 'month').value;
-          const nextDay = nextHourParts.find(p => p.type === 'day').value;
-          const nextHourVal = nextHourParts.find(p => p.type === 'hour').value;
+          const nextYearPart = nextHourParts.find(p => p.type === 'year');
+          const nextMonthPart = nextHourParts.find(p => p.type === 'month');
+          const nextDayPart = nextHourParts.find(p => p.type === 'day');
+          const nextHourPart = nextHourParts.find(p => p.type === 'hour');
+          
+          if (!nextYearPart || !nextMonthPart || !nextDayPart || !nextHourPart) {
+            console.error('❌ formatToParts failed for next hour:', tzDate.toISOString(), 'timezone:', timezone);
+            break; // Exit loop for this entry
+          }
+          
+          const nextYear = nextYearPart.value;
+          const nextMonth = nextMonthPart.value;
+          const nextDay = nextDayPart.value;
+          const nextHourVal = nextHourPart.value;
           
           // If hour didn't change as expected, adjust
           let nextHour: Date;
