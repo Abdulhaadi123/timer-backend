@@ -346,66 +346,31 @@ export class ActivityService {
           }).format(current);
           const hour = parseInt(hourStr);
           
-          // Get current time components in organization timezone
-          const tzFormatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-          });
+          // Find next hour boundary by adding 1 hour and searching
+          const oneHourLater = new Date(current.getTime() + 3600000);
           
-          const parts = tzFormatter.formatToParts(current);
-          const year = parts.find(p => p.type === 'year').value;
-          const month = parts.find(p => p.type === 'month').value;
-          const day = parts.find(p => p.type === 'day').value;
+          // Binary search for exact hour boundary in target timezone
+          let low = current.getTime();
+          let high = oneHourLater.getTime();
           
-          // Create next hour boundary string in organization timezone
-          const nextHourStr = `${month}/${day}/${year}, ${(hour + 1).toString().padStart(2, '0')}:00:00`;
-          
-          // Parse as if it's in organization timezone, then convert to UTC
-          const tempDate = new Date(nextHourStr);
-          const utcOffset = current.getTimezoneOffset() * 60000;
-          const tzDate = new Date(tempDate.getTime() + utcOffset);
-          
-          // Get the actual UTC time for next hour in organization timezone
-          const nextHourParts = tzFormatter.formatToParts(tzDate);
-          const nextYear = nextHourParts.find(p => p.type === 'year').value;
-          const nextMonth = nextHourParts.find(p => p.type === 'month').value;
-          const nextDay = nextHourParts.find(p => p.type === 'day').value;
-          const nextHourVal = nextHourParts.find(p => p.type === 'hour').value;
-          
-          // If hour didn't change as expected, adjust
-          let nextHour: Date;
-          if (parseInt(nextHourVal) === hour + 1 || (hour === 23 && parseInt(nextHourVal) === 0)) {
-            nextHour = tzDate;
-          } else {
-            // Fallback: add 1 hour to current time and find the top of that hour
-            const oneHourLater = new Date(current.getTime() + 3600000);
-            const laterHour = parseInt(tzFormatter.format(oneHourLater).match(/(\d{2}):/)[1]);
+          while (high - low > 1000) {
+            const mid = Math.floor((low + high) / 2);
+            const midDate = new Date(mid);
+            const midHourStr = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              hour: '2-digit',
+              hour12: false,
+            }).format(midDate);
+            const midHour = parseInt(midHourStr);
             
-            // Binary search for exact hour boundary
-            let low = current.getTime();
-            let high = oneHourLater.getTime();
-            
-            while (high - low > 1000) {
-              const mid = Math.floor((low + high) / 2);
-              const midDate = new Date(mid);
-              const midHour = parseInt(tzFormatter.format(midDate).match(/(\d{2}):/)[1]);
-              
-              if (midHour === hour) {
-                low = mid;
-              } else {
-                high = mid;
-              }
+            if (midHour === hour) {
+              low = mid;
+            } else {
+              high = mid;
             }
-            
-            nextHour = new Date(high);
           }
           
+          const nextHour = new Date(high);
           const segmentEnd = nextHour > end ? end : nextHour;
           const segmentMinutes = Math.floor((segmentEnd.getTime() - current.getTime()) / 60000);
           
