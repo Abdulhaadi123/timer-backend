@@ -309,8 +309,6 @@ export class ActivityService {
 
   async getMyStats(userId: string) {
     const now = new Date();
-    // Use UTC midnight for consistent date filtering
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     
     // Get user's organization timezone
     const user = await this.prisma.user.findUnique({
@@ -318,6 +316,40 @@ export class ActivityService {
       include: { organization: true },
     });
     const timezone = user?.organization?.timezone || 'UTC';
+    
+    // ✅ Get midnight of today in organization timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    const parts = formatter.formatToParts(now);
+    const year = parseInt(parts.find(p => p.type === 'year').value);
+    const month = parseInt(parts.find(p => p.type === 'month').value);
+    const day = parseInt(parts.find(p => p.type === 'day').value);
+    
+    // Create midnight in organization timezone as ISO string
+    const midnightStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T00:00:00`;
+    
+    // Parse this as UTC time (which represents midnight in org timezone)
+    const localDate = new Date(midnightStr);
+    
+    // Get offset between UTC and organization timezone
+    const utcDate = new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(localDate.toLocaleString('en-US', { timeZone: timezone }));
+    const offset = utcDate.getTime() - tzDate.getTime();
+    
+    // Apply offset to get correct UTC time for midnight in org timezone
+    const today = new Date(localDate.getTime() + offset);
+    
+    console.log(`📅 Today calculation:`);
+    console.log(`   Current time: ${now.toISOString()}`);
+    console.log(`   Timezone: ${timezone}`);
+    console.log(`   Midnight string: ${midnightStr}`);
+    console.log(`   Today midnight (UTC): ${today.toISOString()}`);
+    console.log(`   Offset: ${offset / 3600000} hours`);
     
     // Get today's check-in/checkout times from device_sessions
     const todaySession = await this.prisma.deviceSession.findFirst({
