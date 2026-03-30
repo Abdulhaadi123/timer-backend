@@ -257,7 +257,24 @@ export class ActivityService {
       orderBy: { startedAt: 'desc' },
     });
 
-    const from = activeSession ? activeSession.startedAt : new Date(now.getTime() - 10 * 60 * 1000);
+    // Find last processed TimeEntry to avoid re-processing
+    const lastEntry = await this.prisma.timeEntry.findFirst({
+      where: { userId, source: 'AUTO' },
+      orderBy: { endedAt: 'desc' },
+    });
+
+    // Start from last processed entry minus 2 minutes buffer, or session start
+    let from: Date;
+    if (lastEntry) {
+      from = new Date(lastEntry.endedAt.getTime() - 2 * 60 * 1000);
+      console.log(`🔄 Rollup starting from last entry: ${lastEntry.endedAt.toISOString()} (with 2min buffer)`);
+    } else if (activeSession) {
+      from = activeSession.startedAt;
+      console.log(`🔄 Rollup starting from session start: ${from.toISOString()}`);
+    } else {
+      from = new Date(now.getTime() - 10 * 60 * 1000);
+      console.log(`🔄 Rollup starting from 10 minutes ago: ${from.toISOString()}`);
+    }
     
     try {
       await this.rollupQueue.add('rollup-user', { userId, from, to: now });
