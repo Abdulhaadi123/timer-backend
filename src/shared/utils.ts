@@ -1,10 +1,10 @@
 export function isWithinCheckinWindow(date: Date, rules: any): boolean {
-  const timeStr = new Intl.DateTimeFormat('en-US', {
+  let timeStr = new Intl.DateTimeFormat('en-US', {
     timeZone: rules.timezone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  }).format(date);
+  }).format(date).replace('24:', '00:');
 
   const { checkinWindow } = rules;
   const { start, end } = checkinWindow;
@@ -17,12 +17,12 @@ export function isWithinCheckinWindow(date: Date, rules: any): boolean {
 }
 
 export function isWithinBreakWindow(date: Date, rules: any): boolean {
-  const timeStr = new Intl.DateTimeFormat('en-US', {
+  let timeStr = new Intl.DateTimeFormat('en-US', {
     timeZone: rules.timezone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  }).format(date);
+  }).format(date).replace('24:', '00:');
 
   const { breakWindow } = rules;
   const { start, end } = breakWindow;
