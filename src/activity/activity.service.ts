@@ -233,20 +233,30 @@ export class ActivityService {
       const firstSampleTime = new Date(validSamples[0].capturedAt);
       const lastSampleTime = new Date(validSamples[validSamples.length - 1].capturedAt);
       
-      // Find last processed TimeEntry to avoid re-processing old samples
+      // Get active session
+      const activeSession = await this.prisma.deviceSession.findFirst({
+        where: { userId, endedAt: null },
+        orderBy: { startedAt: 'desc' },
+      });
+      
+      // Find last processed TimeEntry
       const lastEntry = await this.prisma.timeEntry.findFirst({
         where: { userId, source: 'AUTO' },
         orderBy: { endedAt: 'desc' },
       });
       
-      // Start from last processed entry, or 5 minutes before first sample if no entries exist
+      // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
       let from: Date;
-      if (lastEntry && lastEntry.endedAt > new Date(firstSampleTime.getTime() - 5 * 60 * 1000)) {
-        from = new Date(lastEntry.endedAt.getTime() - 60 * 1000); // 1 minute overlap for safety
-        console.log(`🔄 Rollup from last entry: ${lastEntry.endedAt.toISOString()} (with 1min overlap)`);
+      if (lastEntry && activeSession) {
+        const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+        from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
+        console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
+      } else if (activeSession) {
+        from = activeSession.startedAt;
+        console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
       } else {
-        from = new Date(firstSampleTime.getTime() - 5 * 60 * 1000);
-        console.log(`🔄 Rollup from 5min before first sample: ${from.toISOString()}`);
+        from = new Date(firstSampleTime.getTime() - 6 * 60 * 1000);
+        console.log(`🔄 Rollup from 6min before first sample: ${from.toISOString()}`);
       }
       
       const to = lastSampleTime;
@@ -273,23 +283,24 @@ export class ActivityService {
       orderBy: { startedAt: 'desc' },
     });
 
-    // Find last processed TimeEntry to avoid re-processing
+    // Find last processed TimeEntry
     const lastEntry = await this.prisma.timeEntry.findFirst({
       where: { userId, source: 'AUTO' },
       orderBy: { endedAt: 'desc' },
     });
 
-    // Start from last processed entry minus 2 minutes buffer, or session start
+    // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
     let from: Date;
-    if (lastEntry) {
-      from = new Date(lastEntry.endedAt.getTime() - 2 * 60 * 1000);
-      console.log(`🔄 Rollup starting from last entry: ${lastEntry.endedAt.toISOString()} (with 2min buffer)`);
+    if (lastEntry && activeSession) {
+      const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+      from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
+      console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
     } else if (activeSession) {
       from = activeSession.startedAt;
-      console.log(`🔄 Rollup starting from session start: ${from.toISOString()}`);
+      console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
     } else {
       from = new Date(now.getTime() - 10 * 60 * 1000);
-      console.log(`🔄 Rollup starting from 10 minutes ago: ${from.toISOString()}`);
+      console.log(`🔄 Rollup from 10 minutes ago: ${from.toISOString()}`);
     }
     
     try {
