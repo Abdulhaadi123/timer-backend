@@ -349,7 +349,7 @@ export class ActivityService {
     const timezone = user?.organization?.timezone || 'UTC';
     
     // Get today's check-in/checkout times from device_sessions
-    const todaySession = await this.prisma.deviceSession.findFirst({
+    const firstSession = await this.prisma.deviceSession.findFirst({
       where: {
         userId,
         startedAt: { gte: today },
@@ -357,8 +357,17 @@ export class ActivityService {
       orderBy: { startedAt: 'asc' },
     });
 
-    const checkinTime = todaySession?.startedAt || null;
-    const checkoutTime = todaySession?.endedAt || null;
+    const lastSession = await this.prisma.deviceSession.findFirst({
+      where: {
+        userId,
+        startedAt: { gte: today },
+        endedAt: { not: null },
+      },
+      orderBy: { endedAt: 'desc' },
+    });
+
+    const checkinTime = firstSession?.startedAt || null;
+    const checkoutTime = lastSession?.endedAt || null;
     
     // Get time entries for display
     const entries = await this.prisma.timeEntry.findMany({
