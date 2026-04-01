@@ -394,11 +394,11 @@ export class ActivityService {
         
         while (current < end) {
           // Get hour in organization timezone
-          const hourStr = new Intl.DateTimeFormat('en-US', {
+          let hourStr = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
             hour: '2-digit',
             hour12: false,
-          }).format(current);
+          }).format(current).replace('24', '00');
           const hour = parseInt(hourStr);
           
           // Find next hour boundary using binary search
@@ -409,11 +409,11 @@ export class ActivityService {
           while (high - low > 1000) {
             const mid = Math.floor((low + high) / 2);
             const midDate = new Date(mid);
-            const midHourStr = new Intl.DateTimeFormat('en-US', {
+            let midHourStr = new Intl.DateTimeFormat('en-US', {
               timeZone: timezone,
               hour: '2-digit',
               hour12: false,
-            }).format(midDate);
+            }).format(midDate).replace('24', '00');
             const midHour = parseInt(midHourStr);
             
             if (midHour === hour) {
