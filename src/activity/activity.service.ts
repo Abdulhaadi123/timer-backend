@@ -185,7 +185,6 @@ export class ActivityService {
     console.log(`⏰ Schedule: Check-in ${rules.checkinWindow.start}-${rules.checkinWindow.end}, Break ${rules.breakWindow.start}-${rules.breakWindow.end}, TZ: ${rules.timezone}`);
     
     const validSamples = [];
-    const breakSamples = [];
     
     for (let index = 0; index < samples.length; index++) {
       const sample = samples[index];
@@ -212,8 +211,7 @@ export class ActivityService {
       }
 
       if (isInBreak) {
-        if (index === 0) console.log(`🍽️ Break time sample detected`);
-        breakSamples.push(sample);
+        if (index === 0) console.log(`❌ Rejected: Break time`);
         continue;
       }
 
@@ -274,60 +272,8 @@ export class ActivityService {
       }
     }
 
-    // Create BREAK entries for break time samples
-    if (breakSamples.length > 0) {
-      console.log(`🍽️ Processing ${breakSamples.length} break time samples`);
-      
-      const firstBreakTime = new Date(breakSamples[0].capturedAt);
-      const lastBreakTime = new Date(breakSamples[breakSamples.length - 1].capturedAt);
-      
-      // Round to minute boundaries
-      const breakStart = new Date(firstBreakTime);
-      breakStart.setSeconds(0, 0);
-      const breakEnd = new Date(lastBreakTime);
-      breakEnd.setSeconds(59, 999);
-      
-      // Check if BREAK entry already exists
-      const existingBreak = await this.prisma.timeEntry.findFirst({
-        where: {
-          userId,
-          source: 'AUTO',
-          kind: 'BREAK',
-          startedAt: { lte: breakEnd },
-          endedAt: { gte: breakStart },
-        },
-      });
-      
-      if (existingBreak) {
-        // Extend existing break entry
-        const newStart = existingBreak.startedAt < breakStart ? existingBreak.startedAt : breakStart;
-        const newEnd = existingBreak.endedAt > breakEnd ? existingBreak.endedAt : breakEnd;
-        
-        await this.prisma.timeEntry.update({
-          where: { id: existingBreak.id },
-          data: { startedAt: newStart, endedAt: newEnd },
-        });
-        
-        console.log(`🔄 Extended BREAK entry: ${newStart.toISOString()} to ${newEnd.toISOString()}`);
-      } else {
-        // Create new break entry
-        await this.prisma.timeEntry.create({
-          data: {
-            userId,
-            startedAt: breakStart,
-            endedAt: breakEnd,
-            kind: 'BREAK',
-            source: 'AUTO',
-            projectId: projectId || null,
-          },
-        });
-        
-        console.log(`✅ Created BREAK entry: ${breakStart.toISOString()} to ${breakEnd.toISOString()}`);
-      }
-    }
-
-    const result = { inserted: validSamples.length, rejected: samples.length - validSamples.length - breakSamples.length, breakSamples: breakSamples.length };
-    console.log(`📊 Result: Inserted ${result.inserted}, Break ${result.breakSamples}, Rejected ${result.rejected}`);
+    const result = { inserted: validSamples.length, rejected: samples.length - validSamples.length };
+    console.log(`📊 Result: Inserted ${result.inserted}, Rejected ${result.rejected}`);
     
     return result;
   }
