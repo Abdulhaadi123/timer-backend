@@ -232,7 +232,23 @@ export class ActivityService {
 
       const firstSampleTime = new Date(validSamples[0].capturedAt);
       const lastSampleTime = new Date(validSamples[validSamples.length - 1].capturedAt);
-      const from = new Date(firstSampleTime.getTime() - 5 * 60 * 1000);
+      
+      // Find last processed TimeEntry to avoid re-processing old samples
+      const lastEntry = await this.prisma.timeEntry.findFirst({
+        where: { userId, source: 'AUTO' },
+        orderBy: { endedAt: 'desc' },
+      });
+      
+      // Start from last processed entry, or 5 minutes before first sample if no entries exist
+      let from: Date;
+      if (lastEntry && lastEntry.endedAt > new Date(firstSampleTime.getTime() - 5 * 60 * 1000)) {
+        from = new Date(lastEntry.endedAt.getTime() - 60 * 1000); // 1 minute overlap for safety
+        console.log(`🔄 Rollup from last entry: ${lastEntry.endedAt.toISOString()} (with 1min overlap)`);
+      } else {
+        from = new Date(firstSampleTime.getTime() - 5 * 60 * 1000);
+        console.log(`🔄 Rollup from 5min before first sample: ${from.toISOString()}`);
+      }
+      
       const to = lastSampleTime;
 
       try {
