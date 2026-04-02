@@ -146,11 +146,18 @@ export class RollupService {
             },
           });
 
-          // If new entry is ACTIVE and conflicts with existing IDLE entries, skip it
-          // This preserves idle threshold decisions that were already made
-          if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
-            console.log(`⏭️  Skipping ACTIVE entry that conflicts with existing IDLE: ${newEntry.startedAt.toISOString()}`);
-            continue;
+          // ✅ Smart conflict resolution:
+          // - If new ACTIVE entry conflicts with IDLE that has ended (not ongoing), skip it
+          // - This prevents re-processing old time periods
+          // - But allows ACTIVE entries for ongoing/current IDLE periods
+          if (newEntry.kind === 'ACTIVE' && conflicting.length > 0) {
+            const now = new Date();
+            const allConflictsAreOld = conflicting.every(c => c.endedAt < now);
+            
+            if (allConflictsAreOld) {
+              console.log(`⏭️  Skipping ACTIVE entry for old IDLE period: ${newEntry.startedAt.toISOString()}`);
+              continue;
+            }
           }
 
           // Collect all operations to execute in batch
