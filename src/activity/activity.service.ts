@@ -528,15 +528,20 @@ export class ActivityService {
       
       const workSeconds = elapsedSeconds - calculatedBreakSeconds; // Exclude break time
       
-      // ✅ FIX 2: Grace period - first 30 seconds always 100%
-      if (workSeconds < 30) {
+      // ✅ Grace period - first 30 seconds always 100%
+      const GRACE_PERIOD_SECONDS = 30;
+      
+      if (workSeconds < GRACE_PERIOD_SECONDS) {
         activityRate = 100;
       } else if (workSeconds > 0) {
+        // ✅ Exclude grace period from calculation
+        const workSecondsAfterGrace = workSeconds - GRACE_PERIOD_SECONDS;
+        
         // Expected total seconds (assuming samples every 5 seconds)
-        const expectedTotalSeconds = Math.floor(workSeconds / 5) * 5;
+        const expectedTotalSeconds = Math.floor(workSecondsAfterGrace / 5) * 5;
         
         if (expectedTotalSeconds > 0) {
-          // ✅ FIX 1: Prevent negative inactive seconds
+          // ✅ Prevent negative inactive seconds
           const inactiveSeconds = Math.max(0, expectedTotalSeconds - totalActiveSeconds);
           
           // Activity rate = 100% - (inactive / expected) * 100
@@ -571,13 +576,16 @@ export class ActivityService {
     console.log(`   Elapsed Since Checkin: ${firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) : 0}s`);
     console.log(`   Break Seconds (calculated from schedule): ${breakSeconds}s`);
     const workSecs = firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) - breakSeconds : 0;
-    const expectedTotal = Math.floor(workSecs / 5) * 5;
+    const GRACE_PERIOD_SECONDS = 30;
+    const workSecsAfterGrace = Math.max(0, workSecs - GRACE_PERIOD_SECONDS);
+    const expectedTotal = Math.floor(workSecsAfterGrace / 5) * 5;
     const inactiveSecs = Math.max(0, expectedTotal - totalActiveSeconds);
     console.log(`   Work Seconds (elapsed - break): ${workSecs}s`);
-    console.log(`   Grace Period: ${workSecs < 30 ? 'ACTIVE (first 30s = 100%)' : 'EXPIRED'}`);
+    console.log(`   Grace Period (${GRACE_PERIOD_SECONDS}s): ${workSecs < GRACE_PERIOD_SECONDS ? 'ACTIVE - showing 100%' : 'EXPIRED - excluded from calculation'}`);
+    console.log(`   Work Seconds After Grace: ${workSecsAfterGrace}s`);
     console.log(`   Expected Total Seconds: ${expectedTotal}s`);
     console.log(`   Inactive Seconds: ${inactiveSecs}s`);
-    console.log(`   Formula: ${workSecs < 30 ? '100% (grace period)' : `100 - (${inactiveSecs} / ${expectedTotal}) × 100`}`);
+    console.log(`   Formula: ${workSecs < GRACE_PERIOD_SECONDS ? '100% (grace period)' : `100 - (${inactiveSecs} / ${expectedTotal}) × 100`}`);
     console.log(`   Result: ${activityRate}%`);
     console.log(`========================================\n`);
 
