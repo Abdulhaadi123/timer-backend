@@ -344,9 +344,16 @@ export class ActivityService {
     // Get user's organization timezone
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { organization: true },
+      include: { 
+        organization: { 
+          include: { organization_work_policies: true } 
+        },
+        tracker_profiles: true,
+      },
     });
     const timezone = user?.organization?.timezone || 'UTC';
+    const policy = user?.organization?.organization_work_policies;
+    const trackerProfile = user?.tracker_profiles;
     
     // Get today's check-in/checkout times from device_sessions
     const firstSession = await this.prisma.deviceSession.findFirst({
@@ -468,11 +475,58 @@ export class ActivityService {
     // ✅ PRODUCTION-LEVEL LOGIC: Start from 100% and drop based on inactivity
     let activityRate = 0;
     
-    if (firstSession) {
-      // Calculate total work time (elapsed - break time)
+    if (firstSession && policy) {
+      // Calculate total elapsed time
       const elapsedMs = (now.getTime() - firstSession.startedAt.getTime());
       const elapsedSeconds = Math.floor(elapsedMs / 1000);
-      const workSeconds = elapsedSeconds - breakSeconds; // Exclude break time
+      
+      // ✅ Calculate break time from schedule (not from TimeEntry)
+      let calculatedBreakSeconds = 0;
+      
+      if (policy.break_start && policy.break_end) {
+        const formatTime = (time: Date | null) => {
+          if (!time) return null;
+          const hours = time.getUTCHours().toString().padStart(2, '0');
+          const minutes = time.getUTCMinutes().toString().padStart(2, '0');
+          return `${hours}:${minutes}`;
+        };
+        
+        const breakStart = formatTime(policy.break_start);
+        const breakEnd = formatTime(policy.break_end);
+        
+        if (breakStart && breakEnd) {
+          // Check if user was present during break time today
+          const [startHour, startMin] = breakStart.split(':').map(Number);
+          const [endHour, endMin] = breakEnd.split(':').map(Number);
+          
+          const breakStartTime = new Date(today);
+          breakStartTime.setUTCHours(startHour, startMin, 0, 0);
+          
+          const breakEndTime = new Date(today);
+          breakEndTime.setUTCHours(endHour, endMin, 0, 0);
+          
+          // If break end < break start, it's overnight (e.g., 23:00-01:00)
+          if (breakEndTime <= breakStartTime) {
+            breakEndTime.setUTCDate(breakEndTime.getUTCDate() + 1);
+          }
+          
+          // Calculate overlap between (checkin, now) and (breakStart, breakEnd)
+          const sessionStart = firstSession.startedAt.getTime();
+          const sessionEnd = now.getTime();
+          const breakStartMs = breakStartTime.getTime();
+          const breakEndMs = breakEndTime.getTime();
+          
+          if (sessionEnd > breakStartMs && sessionStart < breakEndMs) {
+            const overlapStart = Math.max(sessionStart, breakStartMs);
+            const overlapEnd = Math.min(sessionEnd, breakEndMs);
+            calculatedBreakSeconds = Math.floor((overlapEnd - overlapStart) / 1000);
+            
+            if (calculatedBreakSeconds < 0) calculatedBreakSeconds = 0;
+          }
+        }
+      }
+      
+      const workSeconds = elapsedSeconds - calculatedBreakSeconds; // Exclude break time
       
       // ✅ FIX 2: Grace period - first 30 seconds always 100%
       if (workSeconds < 30) {
@@ -493,6 +547,8 @@ export class ActivityService {
           if (activityRate > 100) activityRate = 100;
         }
       }
+      
+      breakSeconds = calculatedBreakSeconds; // Update for logging
     }
 
     console.log(`\n========== 📊 MY STATS DEBUG ==========`);
@@ -513,7 +569,7 @@ export class ActivityService {
     console.log(`   Total Samples: ${samplesWithData}`);
     console.log(`   Active Seconds (from samples): ${totalActiveSeconds}`);
     console.log(`   Elapsed Since Checkin: ${firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) : 0}s`);
-    console.log(`   Break Seconds: ${breakSeconds}s`);
+    console.log(`   Break Seconds (calculated from schedule): ${breakSeconds}s`);
     const workSecs = firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) - breakSeconds : 0;
     const expectedTotal = Math.floor(workSecs / 5) * 5;
     const inactiveSecs = Math.max(0, expectedTotal - totalActiveSeconds);

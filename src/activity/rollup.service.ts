@@ -79,11 +79,23 @@ export class RollupService {
         startedAt: Date;
         endedAt: Date;
         hasActivity: boolean;
+        isBreak?: boolean;
       }> = [];
 
       for (const bucket of minuteBuckets) {
         if (!isWithinCheckinWindow(bucket.start, rules)) continue;
-        if (isWithinBreakWindow(bucket.start, rules)) continue;
+        
+        // ✅ Check if in break time - mark as break
+        if (isWithinBreakWindow(bucket.start, rules)) {
+          minuteEntries.push({
+            userId,
+            startedAt: bucket.start,
+            endedAt: bucket.end,
+            hasActivity: false,
+            isBreak: true,
+          });
+          continue;
+        }
 
         // Check activity using activeSeconds field (more accurate) or fallback to mouse/key
         const active = bucket.samples.some((s) => 
@@ -95,6 +107,7 @@ export class RollupService {
           startedAt: bucket.start,
           endedAt: bucket.end,
           hasActivity: active,
+          isBreak: false,
         });
       }
 
