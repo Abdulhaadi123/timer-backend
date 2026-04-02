@@ -112,7 +112,34 @@ export class RollupService {
       }
 
       console.log(`🎯 Applying idle threshold: ${rules.idleThresholdSeconds}s (${Math.floor(rules.idleThresholdSeconds / 60)} minutes)`);
-      const entries = this.applyIdleThreshold(minuteEntries, rules.idleThresholdSeconds);
+      
+      // ✅ Get existing TimeEntry coverage to avoid reprocessing
+      const existingEntries = await this.prisma.timeEntry.findMany({
+        where: {
+          userId,
+          source: 'AUTO',
+          startedAt: { gte: minuteEntries[0]?.startedAt },
+          endedAt: { lte: minuteEntries[minuteEntries.length - 1]?.endedAt },
+        },
+        orderBy: { startedAt: 'asc' },
+      });
+      
+      // Filter out minutes that are already covered by existing entries
+      const uncoveredMinutes = minuteEntries.filter(minute => {
+        const isCovered = existingEntries.some(entry => 
+          minute.startedAt >= entry.startedAt && minute.endedAt <= entry.endedAt
+        );
+        return !isCovered;
+      });
+      
+      console.log(`📋 Total minutes: ${minuteEntries.length}, Already covered: ${minuteEntries.length - uncoveredMinutes.length}, To process: ${uncoveredMinutes.length}`);
+      
+      if (uncoveredMinutes.length === 0) {
+        console.log('✅ All minutes already processed, skipping rollup');
+        return { processed: 0 };
+      }
+      
+      const entries = this.applyIdleThreshold(uncoveredMinutes, rules.idleThresholdSeconds);
       const merged = this.mergeContiguous(entries);
 
       await this.prisma.$transaction(async (tx) => {
@@ -146,21 +173,8 @@ export class RollupService {
             },
           });
 
-          // ✅ Smart conflict resolution:
-          // - Skip ACTIVE entries only if they are trying to rewrite FINALIZED past periods
-          // - A period is finalized if: new entry ends BEFORE current time (completely in past)
-          // - This allows current/ongoing activity to update IDLE periods
-          if (newEntry.kind === 'ACTIVE' && conflicting.length > 0) {
-            const now = new Date();
-            const isCompletelyInPast = newEntry.endedAt < now;
-            
-            if (isCompletelyInPast) {
-              console.log(`⏭️  Skipping ACTIVE entry for finalized past period: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-              continue;
-            }
-            // If entry extends to current time or future, process it (split IDLE)
-            console.log(`✅ Processing ACTIVE entry (ongoing/current): ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-          }
+          // ✅ No need to skip - we only process uncovered minutes now
+          // Conflicting entries will be split properly
 
           // Collect all operations to execute in batch
           const toDelete: bigint[] = [];
