@@ -147,17 +147,19 @@ export class RollupService {
           });
 
           // ✅ Smart conflict resolution:
-          // - If new ACTIVE entry conflicts with IDLE that has ended (not ongoing), skip it
-          // - This prevents re-processing old time periods
-          // - But allows ACTIVE entries for ongoing/current IDLE periods
+          // - Skip ACTIVE entries only if they are trying to rewrite FINALIZED past periods
+          // - A period is finalized if: new entry ends BEFORE current time (completely in past)
+          // - This allows current/ongoing activity to update IDLE periods
           if (newEntry.kind === 'ACTIVE' && conflicting.length > 0) {
             const now = new Date();
-            const allConflictsAreOld = conflicting.every(c => c.endedAt < now);
+            const isCompletelyInPast = newEntry.endedAt < now;
             
-            if (allConflictsAreOld) {
-              console.log(`⏭️  Skipping ACTIVE entry for old IDLE period: ${newEntry.startedAt.toISOString()}`);
+            if (isCompletelyInPast) {
+              console.log(`⏭️  Skipping ACTIVE entry for finalized past period: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
               continue;
             }
+            // If entry extends to current time or future, process it (split IDLE)
+            console.log(`✅ Processing ACTIVE entry (ongoing/current): ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
           }
 
           // Collect all operations to execute in batch
