@@ -112,34 +112,7 @@ export class RollupService {
       }
 
       console.log(`🎯 Applying idle threshold: ${rules.idleThresholdSeconds}s (${Math.floor(rules.idleThresholdSeconds / 60)} minutes)`);
-      
-      // ✅ Get existing TimeEntry coverage to avoid reprocessing
-      const existingEntries = await this.prisma.timeEntry.findMany({
-        where: {
-          userId,
-          source: 'AUTO',
-          startedAt: { gte: minuteEntries[0]?.startedAt },
-          endedAt: { lte: minuteEntries[minuteEntries.length - 1]?.endedAt },
-        },
-        orderBy: { startedAt: 'asc' },
-      });
-      
-      // Filter out minutes that are already covered by existing entries
-      const uncoveredMinutes = minuteEntries.filter(minute => {
-        const isCovered = existingEntries.some(entry => 
-          minute.startedAt >= entry.startedAt && minute.endedAt <= entry.endedAt
-        );
-        return !isCovered;
-      });
-      
-      console.log(`📋 Total minutes: ${minuteEntries.length}, Already covered: ${minuteEntries.length - uncoveredMinutes.length}, To process: ${uncoveredMinutes.length}`);
-      
-      if (uncoveredMinutes.length === 0) {
-        console.log('✅ All minutes already processed, skipping rollup');
-        return { processed: 0 };
-      }
-      
-      const entries = this.applyIdleThreshold(uncoveredMinutes, rules.idleThresholdSeconds);
+      const entries = this.applyIdleThreshold(minuteEntries, rules.idleThresholdSeconds);
       const merged = this.mergeContiguous(entries);
 
       await this.prisma.$transaction(async (tx) => {
@@ -173,8 +146,21 @@ export class RollupService {
             },
           });
 
-          // ✅ No need to skip - we only process uncovered minutes now
-          // Conflicting entries will be split properly
+          // ✅ Allow ACTIVE entries to extend/update existing IDLE periods
+          // Only skip if ACTIVE entry is completely covered by existing IDLE
+          if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
+            const isCompletelyCovered = conflicting.some(c => 
+              c.startedAt <= newEntry.startedAt && c.endedAt >= newEntry.endedAt
+            );
+            
+            if (isCompletelyCovered) {
+              console.log(`⏭️  Skipping ACTIVE entry (completely covered by IDLE): ${newEntry.startedAt.toISOString()}`);
+              continue;
+            }
+            
+            // If ACTIVE extends beyond IDLE, allow it to split/update
+            console.log(`✅ Processing ACTIVE entry (extends beyond IDLE): ${newEntry.startedAt.toISOString()}`);
+          }
 
           // Collect all operations to execute in batch
           const toDelete: bigint[] = [];
