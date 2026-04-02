@@ -146,20 +146,11 @@ export class RollupService {
             },
           });
 
-          // ✅ Allow ACTIVE entries to extend/update existing IDLE periods
-          // Only skip if ACTIVE entry is completely covered by existing IDLE
+          // If new entry is ACTIVE and conflicts with existing IDLE entries, skip it
+          // This preserves idle threshold decisions that were already made
           if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
-            const isCompletelyCovered = conflicting.some(c => 
-              c.startedAt <= newEntry.startedAt && c.endedAt >= newEntry.endedAt
-            );
-            
-            if (isCompletelyCovered) {
-              console.log(`⏭️  Skipping ACTIVE entry (completely covered by IDLE): ${newEntry.startedAt.toISOString()}`);
-              continue;
-            }
-            
-            // If ACTIVE extends beyond IDLE, allow it to split/update
-            console.log(`✅ Processing ACTIVE entry (extends beyond IDLE): ${newEntry.startedAt.toISOString()}`);
+            console.log(`⏭️  Skipping ACTIVE entry that conflicts with existing IDLE: ${newEntry.startedAt.toISOString()}`);
+            continue;
           }
 
           // Collect all operations to execute in batch
