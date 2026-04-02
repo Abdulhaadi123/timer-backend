@@ -442,7 +442,7 @@ export class ActivityService {
 
     const totalSeconds = activeSeconds + idleSeconds + breakSeconds;
 
-    // Calculate activity rate from activitySample (like old backend)
+    // Calculate activity rate from activitySample
     const samples = await this.prisma.activitySample.findMany({
       where: {
         userId,
@@ -465,9 +465,35 @@ export class ActivityService {
       }
     }
 
-    const activityRate = totalSampleSeconds > 0 
-      ? Math.round((totalActiveSeconds / totalSampleSeconds) * 100) 
-      : 0;
+    // ✅ PRODUCTION-LEVEL LOGIC: Start from 100% and drop based on inactivity
+    let activityRate = 0;
+    
+    if (firstSession) {
+      // Calculate total work time (elapsed - break time)
+      const elapsedMs = (now.getTime() - firstSession.startedAt.getTime());
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      const workSeconds = elapsedSeconds - breakSeconds; // Exclude break time
+      
+      // ✅ FIX 2: Grace period - first 30 seconds always 100%
+      if (workSeconds < 30) {
+        activityRate = 100;
+      } else if (workSeconds > 0) {
+        // Expected total seconds (assuming samples every 5 seconds)
+        const expectedTotalSeconds = Math.floor(workSeconds / 5) * 5;
+        
+        if (expectedTotalSeconds > 0) {
+          // ✅ FIX 1: Prevent negative inactive seconds
+          const inactiveSeconds = Math.max(0, expectedTotalSeconds - totalActiveSeconds);
+          
+          // Activity rate = 100% - (inactive / expected) * 100
+          activityRate = Math.round(100 - (inactiveSeconds / expectedTotalSeconds) * 100);
+          
+          // Bounds check
+          if (activityRate < 0) activityRate = 0;
+          if (activityRate > 100) activityRate = 100;
+        }
+      }
+    }
 
     console.log(`\n========== 📊 MY STATS DEBUG ==========`);
     console.log(`🔍 Debug Info:`);
@@ -483,11 +509,19 @@ export class ActivityService {
     console.log(`   Idle Time: ${idleSeconds}s (${Math.floor(idleSeconds/60)}m)`);
     console.log(`   Break Time: ${breakSeconds}s (${Math.floor(breakSeconds/60)}m)`);
     console.log(`   Total Time: ${totalSeconds}s (${Math.floor(totalSeconds/60)}m)`);
-    console.log(`\n📈 Activity Rate (from ActivitySample table):`);
+    console.log(`\n📈 Activity Rate (PRODUCTION LOGIC with Grace Period):`);
     console.log(`   Total Samples: ${samplesWithData}`);
-    console.log(`   Active Seconds: ${totalActiveSeconds}`);
-    console.log(`   Total Sample Seconds: ${totalSampleSeconds}`);
-    console.log(`   Formula: (${totalActiveSeconds} / ${totalSampleSeconds}) × 100`);
+    console.log(`   Active Seconds (from samples): ${totalActiveSeconds}`);
+    console.log(`   Elapsed Since Checkin: ${firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) : 0}s`);
+    console.log(`   Break Seconds: ${breakSeconds}s`);
+    const workSecs = firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) - breakSeconds : 0;
+    const expectedTotal = Math.floor(workSecs / 5) * 5;
+    const inactiveSecs = Math.max(0, expectedTotal - totalActiveSeconds);
+    console.log(`   Work Seconds (elapsed - break): ${workSecs}s`);
+    console.log(`   Grace Period: ${workSecs < 30 ? 'ACTIVE (first 30s = 100%)' : 'EXPIRED'}`);
+    console.log(`   Expected Total Seconds: ${expectedTotal}s`);
+    console.log(`   Inactive Seconds: ${inactiveSecs}s`);
+    console.log(`   Formula: ${workSecs < 30 ? '100% (grace period)' : `100 - (${inactiveSecs} / ${expectedTotal}) × 100`}`);
     console.log(`   Result: ${activityRate}%`);
     console.log(`========================================\n`);
 
