@@ -205,16 +205,15 @@ export class RollupService {
             });
           }
 
+          // Only merge with truly overlapping entries of same kind, not just adjacent
+          // This prevents merging old IDLE-converted-to-ACTIVE with new real ACTIVE
           const overlappingSameKind = await tx.timeEntry.findMany({
             where: {
               userId,
               source: 'AUTO',
               kind: newEntry.kind,
-              OR: [
-                { startedAt: { lt: newEntry.endedAt }, endedAt: { gt: newEntry.startedAt } },
-                { endedAt: newEntry.startedAt },
-                { startedAt: newEntry.endedAt },
-              ],
+              startedAt: { lt: newEntry.endedAt },
+              endedAt: { gt: newEntry.startedAt },
             },
             orderBy: { startedAt: 'asc' },
           });
