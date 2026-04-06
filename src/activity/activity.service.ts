@@ -473,19 +473,20 @@ export class ActivityService {
     // ✅ REAL-TIME FIX: Add unprocessed samples for immediate feedback
     const idleThresholdSeconds = policy?.idle_threshold_seconds || 300;
     
-    if (firstSession && !checkoutTime && lastProcessedTime) {
-      // User is still checked in and we have processed entries
-      const timeSinceLastEntry = Math.floor((now.getTime() - lastProcessedTime.getTime()) / 1000);
+    if (firstSession && !checkoutTime) {
+      // User is still checked in
+      const referenceTime = lastProcessedTime || firstSession.startedAt;
+      const timeSinceReference = Math.floor((now.getTime() - referenceTime.getTime()) / 1000);
       
       // Only process if gap is significant (> 10 seconds) but not too large (< 10 minutes)
-      if (timeSinceLastEntry > 10 && timeSinceLastEntry < 600) {
-        console.log(`⏱️  Gap detected: ${timeSinceLastEntry}s since last TimeEntry - adding real-time data`);
+      if (timeSinceReference > 10 && timeSinceReference < 600) {
+        console.log(`⏱️  Gap detected: ${timeSinceReference}s since ${lastProcessedTime ? 'last TimeEntry' : 'session start'} - adding real-time data`);
         
         // Get unprocessed samples
         const unprocessedSamples = await this.prisma.activitySample.findMany({
           where: {
             userId,
-            capturedAt: { gt: lastProcessedTime, lte: now },
+            capturedAt: { gt: referenceTime, lte: now },
           },
           orderBy: { capturedAt: 'asc' },
         });
