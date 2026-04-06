@@ -71,11 +71,13 @@ export class RollupService {
       const minuteBuckets = this.groupByMinute(samples);
       
       // Get existing time entries to avoid reprocessing
+      // Include entries that overlap with the rollup window (not just those that start in it)
       const existingEntries = await this.prisma.timeEntry.findMany({
         where: {
           userId,
           source: 'AUTO',
-          startedAt: { gte: from, lte: to },
+          startedAt: { lt: to },
+          endedAt: { gt: from },
         },
         select: { startedAt: true, endedAt: true, kind: true },
       });
