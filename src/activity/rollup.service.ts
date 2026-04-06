@@ -146,8 +146,8 @@ export class RollupService {
             },
           });
 
-          // ✅ PRESERVE IDLE DECISIONS: Skip ACTIVE if conflicts with IDLE
-          // This prevents fluctuations by respecting idle threshold decisions
+          // If new entry is ACTIVE and conflicts with existing IDLE entries, skip it
+          // This preserves idle threshold decisions that were already made
           if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
             console.log(`⏭️  Skipping ACTIVE entry that conflicts with existing IDLE: ${newEntry.startedAt.toISOString()}`);
             continue;
