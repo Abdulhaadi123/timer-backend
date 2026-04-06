@@ -216,47 +216,13 @@ export class RollupService {
             });
           }
 
-          // Only merge with truly overlapping entries of same kind, not just adjacent
-          // This prevents merging old IDLE-converted-to-ACTIVE with new real ACTIVE
-          const overlappingSameKind = await tx.timeEntry.findMany({
-            where: {
-              userId,
-              source: 'AUTO',
-              kind: newEntry.kind,
-              startedAt: { lt: newEntry.endedAt },
-              endedAt: { gt: newEntry.startedAt },
-            },
-            orderBy: { startedAt: 'asc' },
-          });
-
-          if (overlappingSameKind.length > 0) {
-            let minStart = newEntry.startedAt;
-            let maxEnd = newEntry.endedAt;
-
-            for (const entry of overlappingSameKind) {
-              if (entry.startedAt < minStart) minStart = entry.startedAt;
-              if (entry.endedAt > maxEnd) maxEnd = entry.endedAt;
-            }
-
-            await tx.timeEntry.update({
-              where: { id: overlappingSameKind[0].id },
-              data: { startedAt: minStart, endedAt: maxEnd },
-            });
-
-            if (overlappingSameKind.length > 1) {
-              await tx.timeEntry.deleteMany({
-                where: { id: { in: overlappingSameKind.slice(1).map(e => e.id) } },
-              });
-            }
-
-            console.log(`🔄 Merged ${overlappingSameKind.length + 1} overlapping/adjacent ${newEntry.kind}: ${minStart.toISOString()} to ${maxEnd.toISOString()}`);
+          // Don't merge with any existing entries - just insert if no exact duplicate
+          // This prevents IDLE-to-ACTIVE conversion and keeps entries separate
+          await tx.timeEntry.create({ data: entryWithProject });
+          if (newEntry.kind === 'ACTIVE') {
+            console.log(`✅ ACTIVE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
           } else {
-            await tx.timeEntry.create({ data: entryWithProject });
-            if (newEntry.kind === 'ACTIVE') {
-              console.log(`✅ ACTIVE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-            } else {
-              console.log(`⏸️ IDLE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-            }
+            console.log(`⏸️ IDLE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
           }
         }
       }, { timeout: 15000 });
