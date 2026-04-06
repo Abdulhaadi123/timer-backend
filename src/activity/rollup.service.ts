@@ -136,13 +136,24 @@ export class RollupService {
             continue;
           }
 
+          // Find conflicting entries of opposite kind that truly overlap
+          // Exclude exact boundaries (adjacent entries are not conflicts)
           const conflicting = await tx.timeEntry.findMany({
             where: {
               userId,
               source: 'AUTO',
               kind: { not: newEntry.kind },
-              startedAt: { lt: newEntry.endedAt },
-              endedAt: { gt: newEntry.startedAt },
+              OR: [
+                // True overlap: conflict starts before new entry ends AND ends after new entry starts
+                {
+                  startedAt: { lt: newEntry.endedAt },
+                  endedAt: { gt: newEntry.startedAt },
+                  NOT: [
+                    { endedAt: newEntry.startedAt },  // Exclude if conflict ends exactly where new starts
+                    { startedAt: newEntry.endedAt },  // Exclude if conflict starts exactly where new ends
+                  ],
+                },
+              ],
             },
           });
 
