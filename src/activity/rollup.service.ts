@@ -146,10 +146,10 @@ export class RollupService {
             },
           });
 
-          // If new entry is ACTIVE and conflicts with existing IDLE entries, skip it
-          // This preserves idle threshold decisions that were already made
-          if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
-            console.log(`⏭️  Skipping ACTIVE entry that conflicts with existing IDLE: ${newEntry.startedAt.toISOString()}`);
+          // If new entry is IDLE and conflicts with existing ACTIVE entries, skip it
+          // This preserves real activity that was already tracked
+          if (newEntry.kind === 'IDLE' && conflicting.some(c => c.kind === 'ACTIVE')) {
+            console.log(`⏭️  Skipping IDLE entry that conflicts with existing ACTIVE: ${newEntry.startedAt.toISOString()}`);
             continue;
           }
 
