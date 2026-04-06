@@ -146,27 +146,11 @@ export class RollupService {
             },
           });
 
-          // ✅ SMART CONFLICT RESOLUTION:
-          // If new entry is ACTIVE and conflicts with IDLE:
-          //   - If new ACTIVE is NEWER (more recent samples), REPLACE IDLE
-          //   - If new ACTIVE is OLDER (re-processing), SKIP to preserve IDLE
-          // This prevents fluctuations while allowing real activity to update
-          
+          // ✅ PRESERVE IDLE DECISIONS: Skip ACTIVE if conflicts with IDLE
+          // This prevents fluctuations by respecting idle threshold decisions
           if (newEntry.kind === 'ACTIVE' && conflicting.some(c => c.kind === 'IDLE')) {
-            // Check if this is a re-processing (old samples) or new activity
-            const newestConflict = conflicting.reduce((newest, current) => 
-              current.endedAt > newest.endedAt ? current : newest
-            );
-            
-            // If new ACTIVE entry ends BEFORE the existing IDLE entry ended,
-            // it means we're re-processing old data - skip it
-            if (newEntry.endedAt <= newestConflict.endedAt) {
-              console.log(`⏭️  Skipping ACTIVE entry (re-processing old data): ${newEntry.startedAt.toISOString()}`);
-              continue;
-            }
-            
-            // Otherwise, this is NEW activity after IDLE - allow it to replace
-            console.log(`✅ Allowing ACTIVE entry to replace IDLE (new activity detected): ${newEntry.startedAt.toISOString()}`);
+            console.log(`⏭️  Skipping ACTIVE entry that conflicts with existing IDLE: ${newEntry.startedAt.toISOString()}`);
+            continue;
           }
 
           // Collect all operations to execute in batch
