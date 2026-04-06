@@ -85,6 +85,21 @@ export class RollupService {
       for (const bucket of minuteBuckets) {
         if (!isWithinCheckinWindow(bucket.start, rules)) continue;
         
+        // ✅ Skip if this minute already has a TimeEntry (avoid reprocessing)
+        const existingEntry = await this.prisma.timeEntry.findFirst({
+          where: {
+            userId,
+            source: 'AUTO',
+            startedAt: bucket.start,
+            endedAt: bucket.end,
+          },
+        });
+        
+        if (existingEntry) {
+          console.log(`⏭️  Skipping minute ${bucket.start.toISOString()} - already processed as ${existingEntry.kind}`);
+          continue;
+        }
+        
         // ✅ Check if in break time - mark as break
         if (isWithinBreakWindow(bucket.start, rules)) {
           minuteEntries.push({
