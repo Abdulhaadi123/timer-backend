@@ -69,6 +69,28 @@ export class RollupService {
       }
 
       const minuteBuckets = this.groupByMinute(samples);
+      
+      // Get existing time entries to avoid reprocessing
+      const existingEntries = await this.prisma.timeEntry.findMany({
+        where: {
+          userId,
+          source: 'AUTO',
+          startedAt: { gte: from, lte: to },
+        },
+        select: { startedAt: true, endedAt: true, kind: true },
+      });
+      
+      // Create a set of already-processed minute timestamps
+      const processedMinutes = new Set<number>();
+      for (const entry of existingEntries) {
+        let current = new Date(entry.startedAt);
+        const end = new Date(entry.endedAt);
+        while (current < end) {
+          processedMinutes.add(current.getTime());
+          current = addMinutes(current, 1);
+        }
+      }
+      
       const minuteEntries: Array<{
         userId: string;
         startedAt: Date;
@@ -79,6 +101,11 @@ export class RollupService {
 
       for (const bucket of minuteBuckets) {
         if (!isWithinCheckinWindow(bucket.start, rules)) continue;
+        
+        // Skip if this minute was already processed
+        if (processedMinutes.has(bucket.start.getTime())) {
+          continue;
+        }
         
         // ✅ Check if in break time - mark as break
         if (isWithinBreakWindow(bucket.start, rules)) {
