@@ -247,18 +247,21 @@ export class ActivityService {
         orderBy: { endedAt: 'desc' },
       });
       
-      // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
+      // ✅ SMART LOOKBACK: Use idle threshold + 1 min buffer
+      // This ensures we can properly detect idle-to-active transitions
       let from: Date;
       if (lastEntry && activeSession) {
-        const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+        const idleThresholdMs = (policy.idle_threshold_seconds || 300) * 1000;
+        const lookbackMs = idleThresholdMs + (1 * 60 * 1000); // idle threshold + 1 min buffer
+        const lookbackTime = new Date(lastEntry.endedAt.getTime() - lookbackMs);
         from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
-        console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
+        console.log(`🔄 Rollup from ${from.toISOString()} (${Math.floor(lookbackMs/60000)}min lookback = idle threshold + 1min)`);
       } else if (activeSession) {
         from = activeSession.startedAt;
         console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
       } else {
-        from = new Date(firstSampleTime.getTime() - 6 * 60 * 1000);
-        console.log(`🔄 Rollup from 6min before first sample: ${from.toISOString()}`);
+        from = new Date(firstSampleTime.getTime() - 1 * 60 * 1000);
+        console.log(`🔄 Rollup from 1min before first sample: ${from.toISOString()}`);
       }
       
       const to = lastSampleTime;
@@ -285,18 +288,31 @@ export class ActivityService {
       orderBy: { startedAt: 'desc' },
     });
 
+    // Get user's idle threshold
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { 
+        organization: { 
+          include: { organization_work_policies: true } 
+        },
+      },
+    });
+    const policy = user?.organization?.organization_work_policies;
+
     // Find last processed TimeEntry
     const lastEntry = await this.prisma.timeEntry.findFirst({
       where: { userId, source: 'AUTO' },
       orderBy: { endedAt: 'desc' },
     });
 
-    // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
+    // ✅ SMART LOOKBACK: Use idle threshold + 1 min buffer
     let from: Date;
     if (lastEntry && activeSession) {
-      const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+      const idleThresholdMs = (policy?.idle_threshold_seconds || 300) * 1000;
+      const lookbackMs = idleThresholdMs + (1 * 60 * 1000);
+      const lookbackTime = new Date(lastEntry.endedAt.getTime() - lookbackMs);
       from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
-      console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
+      console.log(`🔄 Rollup from ${from.toISOString()} (${Math.floor(lookbackMs/60000)}min lookback = idle threshold + 1min)`);
     } else if (activeSession) {
       from = activeSession.startedAt;
       console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
@@ -383,17 +399,22 @@ export class ActivityService {
         source: 'AUTO',
         startedAt: { gte: today },
       },
+      orderBy: { startedAt: 'asc' },
     });
 
     let activeSeconds = 0;
     let idleSeconds = 0;
     let breakSeconds = 0;
     const hourlyData: { [hour: number]: number } = {};
+    
+    // ✅ Track last processed time to detect gaps
+    let lastProcessedTime: Date | null = null;
 
     for (const entry of entries) {
       const duration = Math.floor((entry.endedAt.getTime() - entry.startedAt.getTime()) / 1000);
       if (entry.kind === 'ACTIVE') {
         activeSeconds += duration;
+        lastProcessedTime = entry.endedAt;
         
         // Calculate hourly breakdown for ACTIVE entries in minutes using organization timezone
         let current = new Date(entry.startedAt);
@@ -442,8 +463,100 @@ export class ActivityService {
         }
       } else if (entry.kind === 'IDLE') {
         idleSeconds += duration;
+        lastProcessedTime = entry.endedAt;
       } else if (entry.kind === 'BREAK') {
         breakSeconds += duration;
+        lastProcessedTime = entry.endedAt;
+      }
+    }
+
+    // ✅ REAL-TIME FIX: Add unprocessed samples for immediate feedback
+    const idleThresholdSeconds = policy?.idle_threshold_seconds || 300;
+    
+    if (firstSession && !checkoutTime && lastProcessedTime) {
+      // User is still checked in and we have processed entries
+      const timeSinceLastEntry = Math.floor((now.getTime() - lastProcessedTime.getTime()) / 1000);
+      
+      // Only process if gap is significant (> 10 seconds) but not too large (< 10 minutes)
+      if (timeSinceLastEntry > 10 && timeSinceLastEntry < 600) {
+        console.log(`⏱️  Gap detected: ${timeSinceLastEntry}s since last TimeEntry - adding real-time data`);
+        
+        // Get unprocessed samples
+        const unprocessedSamples = await this.prisma.activitySample.findMany({
+          where: {
+            userId,
+            capturedAt: { gt: lastProcessedTime, lte: now },
+          },
+          orderBy: { capturedAt: 'asc' },
+        });
+        
+        if (unprocessedSamples.length > 0) {
+          console.log(`📊 Found ${unprocessedSamples.length} unprocessed samples`);
+          
+          // Group samples by minute and check activity
+          const minuteBuckets = new Map<number, boolean>();
+          
+          for (const sample of unprocessedSamples) {
+            const minuteKey = Math.floor(sample.capturedAt.getTime() / 60000);
+            const hasActivity = (sample.activeSeconds && sample.activeSeconds > 0) || 
+                              sample.mouseDelta > 0 || 
+                              sample.keyCount > 0;
+            
+            if (hasActivity) {
+              minuteBuckets.set(minuteKey, true);
+            } else if (!minuteBuckets.has(minuteKey)) {
+              minuteBuckets.set(minuteKey, false);
+            }
+          }
+          
+          // Apply idle threshold logic
+          const sortedMinutes = Array.from(minuteBuckets.entries()).sort((a, b) => a[0] - b[0]);
+          let consecutiveIdleMinutes = 0;
+          const idleThresholdMinutes = Math.floor(idleThresholdSeconds / 60);
+          let realtimeActive = 0;
+          let realtimeIdle = 0;
+          
+          for (const [minuteKey, hasActivity] of sortedMinutes) {
+            if (hasActivity) {
+              // Active minute
+              realtimeActive += 60;
+              consecutiveIdleMinutes = 0;
+              
+              // Add to hourly data
+              const minuteDate = new Date(minuteKey * 60000);
+              const hourStr = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: '2-digit',
+                hour12: false,
+              }).format(minuteDate).replace('24', '00');
+              const hour = parseInt(hourStr);
+              hourlyData[hour] = (hourlyData[hour] || 0) + 1;
+            } else {
+              consecutiveIdleMinutes++;
+              
+              if (consecutiveIdleMinutes > idleThresholdMinutes) {
+                // Idle minute
+                realtimeIdle += 60;
+              } else {
+                // Within threshold, count as active
+                realtimeActive += 60;
+                
+                const minuteDate = new Date(minuteKey * 60000);
+                const hourStr = new Intl.DateTimeFormat('en-US', {
+                  timeZone: timezone,
+                  hour: '2-digit',
+                  hour12: false,
+                }).format(minuteDate).replace('24', '00');
+                const hour = parseInt(hourStr);
+                hourlyData[hour] = (hourlyData[hour] || 0) + 1;
+              }
+            }
+          }
+          
+          activeSeconds += realtimeActive;
+          idleSeconds += realtimeIdle;
+          console.log(`✅ Added real-time: +${realtimeActive}s active, +${realtimeIdle}s idle`);
+        }
       }
     }
 
