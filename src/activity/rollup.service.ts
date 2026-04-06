@@ -15,8 +15,6 @@ export class RollupService {
 
   async rollupUserActivity(userId: string, from: Date, to: Date, projectId?: string) {
     try {
-      console.log(`🔄 Starting rollup for user ${userId} from ${from.toISOString()} to ${to.toISOString()}, project: ${projectId || 'None'}`);
-      
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { 
@@ -66,10 +64,7 @@ export class RollupService {
         orderBy: { capturedAt: 'asc' },
       });
 
-      console.log(`📊 Found ${samples.length} samples to process`);
-
       if (samples.length === 0) {
-        console.log('⚠️ No samples to process');
         return;
       }
 
@@ -111,7 +106,6 @@ export class RollupService {
         });
       }
 
-      console.log(`🎯 Applying idle threshold: ${rules.idleThresholdSeconds}s (${Math.floor(rules.idleThresholdSeconds / 60)} minutes)`);
       const entries = this.applyIdleThreshold(minuteEntries, rules.idleThresholdSeconds);
       const merged = this.mergeContiguous(entries);
 
@@ -132,7 +126,6 @@ export class RollupService {
           });
 
           if (existingExact) {
-            console.log(`⏭️  Skipping duplicate: ${newEntry.kind} ${newEntry.startedAt.toISOString()}`);
             continue;
           }
 
@@ -177,8 +170,16 @@ export class RollupService {
             );
             
             if (fullyOverlapped) {
-              console.log(`⏭️  Skipping IDLE entry fully covered by existing ACTIVE: ${newEntry.startedAt.toISOString()}`);
+              console.log(`⏭️ IDLE fully covered by ACTIVE, skipping: ${newEntry.startedAt.toISOString()}`);
               continue;
+            }
+          }
+
+          // Log conflicts before processing
+          if (trueConflicts.length > 0) {
+            console.log(`🔍 Conflict detected for ${newEntry.kind} ${newEntry.startedAt.toISOString()}-${newEntry.endedAt.toISOString()}:`);
+            for (const c of trueConflicts) {
+              console.log(`   - Existing ${c.kind} ${c.startedAt.toISOString()}-${c.endedAt.toISOString()}`);
             }
           }
 
@@ -188,25 +189,30 @@ export class RollupService {
 
           for (const conflict of trueConflicts) {
             toDelete.push(conflict.id);
+            console.log(`   🗑️ Deleting: ${conflict.kind} ${conflict.startedAt.toISOString()}-${conflict.endedAt.toISOString()}`);
 
             if (conflict.startedAt < newEntry.startedAt) {
-              toCreate.push({
+              const splitEntry = {
                 userId,
                 startedAt: conflict.startedAt,
                 endedAt: newEntry.startedAt,
                 kind: conflict.kind,
                 source: 'AUTO',
-              });
+              };
+              toCreate.push(splitEntry);
+              console.log(`   ➕ Creating split (before): ${conflict.kind} ${conflict.startedAt.toISOString()}-${newEntry.startedAt.toISOString()}`);
             }
 
             if (conflict.endedAt > newEntry.endedAt) {
-              toCreate.push({
+              const splitEntry = {
                 userId,
                 startedAt: newEntry.endedAt,
                 endedAt: conflict.endedAt,
                 kind: conflict.kind,
                 source: 'AUTO',
-              });
+              };
+              toCreate.push(splitEntry);
+              console.log(`   ➕ Creating split (after): ${conflict.kind} ${newEntry.endedAt.toISOString()}-${conflict.endedAt.toISOString()}`);
             }
           }
 
@@ -223,18 +229,13 @@ export class RollupService {
             });
           }
 
-          // Don't merge with any existing entries - just insert if no exact duplicate
-          // This prevents IDLE-to-ACTIVE conversion and keeps entries separate
+          // Insert new entry
           await tx.timeEntry.create({ data: entryWithProject });
-          if (newEntry.kind === 'ACTIVE') {
-            console.log(`✅ ACTIVE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-          } else {
-            console.log(`⏸️ IDLE time ho raha hai: ${newEntry.startedAt.toISOString()} to ${newEntry.endedAt.toISOString()}`);
-          }
+          const duration = Math.floor((newEntry.endedAt.getTime() - newEntry.startedAt.getTime()) / 60000);
+          console.log(`✅ Inserted ${newEntry.kind}: ${newEntry.startedAt.toISOString()}-${newEntry.endedAt.toISOString()} (${duration}min)`);
         }
       }, { timeout: 15000 });
 
-      console.log(`✅ Rollup complete: Processed ${merged.length} entries`);
       return { processed: merged.length };
 
     } catch (error) {
@@ -274,16 +275,11 @@ export class RollupService {
     let consecutiveIdleCount = 0;
     let pendingIdleEntries: Array<typeof entries[0]> = [];
 
-    console.log(`📋 Processing ${minuteEntries.length} minute entries with threshold ${idleThresholdMinutes} minutes`);
-
     for (let i = 0; i < minuteEntries.length; i++) {
       const entry = minuteEntries[i];
 
       if (entry.hasActivity) {
-        console.log(`  ✅ Minute ${i + 1}: ACTIVE (has activity) - reset idle counter`);
-        
         if (pendingIdleEntries.length > 0) {
-          console.log(`    → Flushing ${pendingIdleEntries.length} pending minutes as ACTIVE`);
           entries.push(...pendingIdleEntries);
           pendingIdleEntries = [];
         }
@@ -298,10 +294,8 @@ export class RollupService {
         });
       } else {
         consecutiveIdleCount++;
-        console.log(`  ⏸️  Minute ${i + 1}: No activity - consecutive idle: ${consecutiveIdleCount}/${idleThresholdMinutes}`);
 
         if (consecutiveIdleCount > idleThresholdMinutes) {
-          console.log(`    → Already past threshold, adding as IDLE`);
           entries.push({
             userId: entry.userId,
             startedAt: entry.startedAt,
@@ -320,7 +314,6 @@ export class RollupService {
           pendingIdleEntries.push(pendingEntry);
 
           if (consecutiveIdleCount === idleThresholdMinutes) {
-            console.log(`    → Threshold reached! Converting ${pendingIdleEntries.length} minutes to IDLE`);
             const idleEntries = pendingIdleEntries.map(e => ({ ...e, kind: 'IDLE' as const }));
             entries.push(...idleEntries);
             pendingIdleEntries = [];
@@ -330,13 +323,8 @@ export class RollupService {
     }
 
     if (pendingIdleEntries.length > 0) {
-      console.log(`  → Flushing ${pendingIdleEntries.length} pending minutes as ACTIVE (threshold not reached)`);
       entries.push(...pendingIdleEntries);
     }
-
-    const activeCount = entries.filter(e => e.kind === 'ACTIVE').length;
-    const idleCount = entries.filter(e => e.kind === 'IDLE').length;
-    console.log(`📊 Result: ${activeCount} ACTIVE, ${idleCount} IDLE entries`);
 
     return entries;
   }
