@@ -146,11 +146,22 @@ export class RollupService {
             },
           });
 
-          // If new entry is IDLE and conflicts with existing ACTIVE entries, skip it
-          // This preserves real activity that was already tracked
-          if (newEntry.kind === 'IDLE' && conflicting.some(c => c.kind === 'ACTIVE')) {
-            console.log(`⏭️  Skipping IDLE entry that conflicts with existing ACTIVE: ${newEntry.startedAt.toISOString()}`);
-            continue;
+          // If new entry conflicts with existing entries of opposite kind:
+          // - ACTIVE should overwrite IDLE (real activity takes priority)
+          // - IDLE should NOT overwrite ACTIVE (preserve real activity)
+          // But allow IDLE to be added in new time periods (no full overlap)
+          if (newEntry.kind === 'IDLE' && conflicting.length > 0) {
+            // Check if there's a conflicting ACTIVE that fully covers this IDLE period
+            const fullyOverlapped = conflicting.some(c => 
+              c.kind === 'ACTIVE' && 
+              c.startedAt <= newEntry.startedAt && 
+              c.endedAt >= newEntry.endedAt
+            );
+            
+            if (fullyOverlapped) {
+              console.log(`⏭️  Skipping IDLE entry fully covered by existing ACTIVE: ${newEntry.startedAt.toISOString()}`);
+              continue;
+            }
           }
 
           // Collect all operations to execute in batch
