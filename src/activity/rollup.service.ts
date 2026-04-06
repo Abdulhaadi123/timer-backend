@@ -137,33 +137,40 @@ export class RollupService {
           }
 
           // Find conflicting entries of opposite kind that truly overlap
-          // Exclude exact boundaries (adjacent entries are not conflicts)
+          // Use strict time comparison to avoid millisecond boundary issues
           const conflicting = await tx.timeEntry.findMany({
             where: {
               userId,
               source: 'AUTO',
               kind: { not: newEntry.kind },
-              OR: [
-                // True overlap: conflict starts before new entry ends AND ends after new entry starts
-                {
-                  startedAt: { lt: newEntry.endedAt },
-                  endedAt: { gt: newEntry.startedAt },
-                  NOT: [
-                    { endedAt: newEntry.startedAt },  // Exclude if conflict ends exactly where new starts
-                    { startedAt: newEntry.endedAt },  // Exclude if conflict starts exactly where new ends
-                  ],
-                },
-              ],
+              startedAt: { lt: newEntry.endedAt },
+              endedAt: { gt: newEntry.startedAt },
             },
+          });
+          
+          // Filter out exact boundary matches (adjacent entries)
+          const trueConflicts = conflicting.filter(c => {
+            const cStart = c.startedAt.getTime();
+            const cEnd = c.endedAt.getTime();
+            const nStart = newEntry.startedAt.getTime();
+            const nEnd = newEntry.endedAt.getTime();
+            
+            // Exclude if conflict ends exactly where new starts (adjacent)
+            if (cEnd === nStart) return false;
+            
+            // Exclude if conflict starts exactly where new ends (adjacent)
+            if (cStart === nEnd) return false;
+            
+            return true;
           });
 
           // If new entry conflicts with existing entries of opposite kind:
           // - ACTIVE should overwrite IDLE (real activity takes priority)
           // - IDLE should NOT overwrite ACTIVE (preserve real activity)
           // But allow IDLE to be added in new time periods (no full overlap)
-          if (newEntry.kind === 'IDLE' && conflicting.length > 0) {
+          if (newEntry.kind === 'IDLE' && trueConflicts.length > 0) {
             // Check if there's a conflicting ACTIVE that fully covers this IDLE period
-            const fullyOverlapped = conflicting.some(c => 
+            const fullyOverlapped = trueConflicts.some(c => 
               c.kind === 'ACTIVE' && 
               c.startedAt <= newEntry.startedAt && 
               c.endedAt >= newEntry.endedAt
@@ -179,7 +186,7 @@ export class RollupService {
           const toDelete: bigint[] = [];
           const toCreate: any[] = [];
 
-          for (const conflict of conflicting) {
+          for (const conflict of trueConflicts) {
             toDelete.push(conflict.id);
 
             if (conflict.startedAt < newEntry.startedAt) {
