@@ -158,7 +158,7 @@ export class RollupService {
             
             const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
             if (consecutiveIdle < idleThresholdMinutes) {
-              console.log(`⏭️ Skipping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
+              console.log(`⏭️ Skiping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
               continue;
             }
           }
