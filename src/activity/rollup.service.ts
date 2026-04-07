@@ -172,18 +172,25 @@ export class RollupService {
         for (const newEntry of merged) {
           const entryWithProject = { ...newEntry, projectId: projectId || null };
           
-          const existingExact = await tx.timeEntry.findFirst({
+          // Delete any overlapping entries of same kind before inserting
+          const overlappingEntries = await tx.timeEntry.findMany({
             where: {
               userId,
               source: 'AUTO',
               kind: newEntry.kind,
-              startedAt: newEntry.startedAt,
-              endedAt: newEntry.endedAt,
+              startedAt: { lt: newEntry.endedAt },
+              endedAt: { gt: newEntry.startedAt },
             },
           });
 
-          if (existingExact) {
-            continue;
+          if (overlappingEntries.length > 0) {
+            // Delete all overlapping entries
+            await tx.timeEntry.deleteMany({
+              where: {
+                id: { in: overlappingEntries.map(e => e.id) },
+              },
+            });
+            console.log(`🗑️ Deleted ${overlappingEntries.length} overlapping ${newEntry.kind} entries`);
           }
 
           // Find conflicting entries of opposite kind that truly overlap
