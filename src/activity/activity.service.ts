@@ -247,18 +247,18 @@ export class ActivityService {
         orderBy: { endedAt: 'desc' },
       });
       
-      // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
+      // Use 10-minute lookback to ensure idle threshold detection (5min threshold + buffer), bounded by session start
       let from: Date;
       if (lastEntry && activeSession) {
-        const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+        const lookbackTime = new Date(lastEntry.endedAt.getTime() - 10 * 60 * 1000);
         from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
-        console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
+        console.log(`🔄 Rollup from ${from.toISOString()} (10min lookback, bounded by session)`);
       } else if (activeSession) {
         from = activeSession.startedAt;
         console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
       } else {
-        from = new Date(firstSampleTime.getTime() - 6 * 60 * 1000);
-        console.log(`🔄 Rollup from 6min before first sample: ${from.toISOString()}`);
+        from = new Date(firstSampleTime.getTime() - 10 * 60 * 1000);
+        console.log(`🔄 Rollup from 10min before first sample: ${from.toISOString()}`);
       }
       
       const to = lastSampleTime;
@@ -291,12 +291,12 @@ export class ActivityService {
       orderBy: { endedAt: 'desc' },
     });
 
-    // Use 6-minute lookback to ensure idle threshold detection, bounded by session start
+    // Use 10-minute lookback to ensure idle threshold detection (5min threshold + buffer), bounded by session start
     let from: Date;
     if (lastEntry && activeSession) {
-      const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+      const lookbackTime = new Date(lastEntry.endedAt.getTime() - 10 * 60 * 1000);
       from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
-      console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
+      console.log(`🔄 Rollup from ${from.toISOString()} (10min lookback, bounded by session)`);
     } else if (activeSession) {
       from = activeSession.startedAt;
       console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
