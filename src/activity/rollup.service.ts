@@ -138,30 +138,8 @@ export class RollupService {
             continue;
           }
           
-          // If existing is ACTIVE but current is IDLE, only process if we have enough consecutive idle minutes
-          // This prevents premature conversion to IDLE
-          if (existingIsActive && !currentIsActive) {
-            // Count consecutive idle minutes from this point
-            let consecutiveIdle = 0;
-            for (let i = minuteBuckets.indexOf(bucket); i < minuteBuckets.length; i++) {
-              const b = minuteBuckets[i];
-              const isIdle = !b.samples.some((s) => 
-                (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
-                hasActivity(s.mouseDelta, s.keyCount)
-              );
-              if (isIdle) {
-                consecutiveIdle++;
-              } else {
-                break;
-              }
-            }
-            
-            const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
-            if (consecutiveIdle < idleThresholdMinutes) {
-              console.log(`⏭️ Skipping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
-              continue;
-            }
-          }
+          // Allow state changes - applyIdleThreshold will handle consecutive idle logic
+          console.log(`🔄 State change detected: ${existingEntry.kind} -> ${currentIsActive ? 'ACTIVE' : 'IDLE'} at ${bucket.start.toISOString()}`);
         }
         
         // ✅ Check if in break time - mark as break
@@ -236,22 +214,23 @@ export class RollupService {
             return true;
           });
 
-          // If new entry conflicts with existing entries of opposite kind:
-          // - ACTIVE should overwrite IDLE (real activity takes priority)
-          // - IDLE should NOT overwrite ACTIVE (preserve real activity)
-          // But allow IDLE to be added in new time periods (no full overlap)
+          // Smart conflict resolution:
+          // - ACTIVE should ALWAYS replace IDLE (real activity takes priority)
+          // - IDLE should ONLY replace ACTIVE when the IDLE duration >= threshold
+          //   (ensures it's from consecutive idle minutes, not a single idle minute)
           if (newEntry.kind === 'IDLE' && trueConflicts.length > 0) {
-            // Check if there's a conflicting ACTIVE that fully covers this IDLE period
-            const fullyOverlapped = trueConflicts.some(c => 
-              c.kind === 'ACTIVE' && 
-              c.startedAt <= newEntry.startedAt && 
-              c.endedAt >= newEntry.endedAt
+            const idleDurationMinutes = Math.floor(
+              (newEntry.endedAt.getTime() - newEntry.startedAt.getTime()) / 60000
             );
+            const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
             
-            if (fullyOverlapped) {
-              console.log(`⏭️ IDLE fully covered by ACTIVE, skipping: ${newEntry.startedAt.toISOString()}`);
+            // Only allow IDLE to replace ACTIVE if IDLE duration meets threshold
+            if (idleDurationMinutes < idleThresholdMinutes) {
+              console.log(`⏭️ IDLE too short (${idleDurationMinutes}min < ${idleThresholdMinutes}min), skipping: ${newEntry.startedAt.toISOString()}`);
               continue;
             }
+            
+            console.log(`🔄 IDLE (${idleDurationMinutes}min) replacing ACTIVE: ${newEntry.startedAt.toISOString()}`);
           }
 
           // Log conflicts before processing
