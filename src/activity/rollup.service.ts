@@ -172,17 +172,19 @@ export class RollupService {
         for (const newEntry of merged) {
           const entryWithProject = { ...newEntry, projectId: projectId || null };
           
-          const existingExact = await tx.timeEntry.findFirst({
+          // Check for exact match OR overlapping entries of same kind
+          const existingOverlap = await tx.timeEntry.findFirst({
             where: {
               userId,
               source: 'AUTO',
               kind: newEntry.kind,
-              startedAt: newEntry.startedAt,
-              endedAt: newEntry.endedAt,
+              startedAt: { lt: newEntry.endedAt },
+              endedAt: { gt: newEntry.startedAt },
             },
           });
 
-          if (existingExact) {
+          if (existingOverlap) {
+            console.log(`⏭️ Skipping overlapping ${newEntry.kind} entry: ${newEntry.startedAt.toISOString()}-${newEntry.endedAt.toISOString()}`);
             continue;
           }
 
