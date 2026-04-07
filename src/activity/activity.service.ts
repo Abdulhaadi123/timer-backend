@@ -72,24 +72,29 @@ export class ActivityService {
       where: { userId, deviceId, endedAt: null },
     });
 
-    for (const oldSession of existingSessions) {
-      console.log(`⚠️ Found unclosed session ${oldSession.id}, closing and processing...`);
-      
-      await this.prisma.deviceSession.update({
-        where: { id: oldSession.id },
-        data: { endedAt: new Date() },
-      });
+    // Close unclosed sessions and queue rollup in background
+    if (existingSessions.length > 0) {
+      setImmediate(async () => {
+        for (const oldSession of existingSessions) {
+          console.log(`⚠️ Found unclosed session ${oldSession.id}, closing and processing...`);
+          
+          await this.prisma.deviceSession.update({
+            where: { id: oldSession.id },
+            data: { endedAt: new Date() },
+          });
 
-      const from = oldSession.startedAt;
-      const to = new Date();
-      
-      try {
-        await this.rollupQueue.add('rollup-user', { userId: oldSession.userId, from, to });
-        console.log(`🔄 Queued rollup for unclosed session ${oldSession.id}`);
-      } catch (error) {
-        console.log(`⚠️ Redis unavailable, running rollup directly for unclosed session`);
-        await this.rollupService.rollupUserActivity(oldSession.userId, from, to);
-      }
+          const from = oldSession.startedAt;
+          const to = new Date();
+          
+          try {
+            await this.rollupQueue.add('rollup-user', { userId: oldSession.userId, from, to });
+            console.log(`🔄 Queued rollup for unclosed session ${oldSession.id}`);
+          } catch (error) {
+            console.log(`⚠️ Redis unavailable, running rollup directly for unclosed session`);
+            await this.rollupService.rollupUserActivity(oldSession.userId, from, to);
+          }
+        }
+      });
     }
 
     const session = await this.prisma.deviceSession.create({
@@ -280,40 +285,41 @@ export class ActivityService {
 
   async triggerRollup(userId: string) {
     const now = new Date();
-    const activeSession = await this.prisma.deviceSession.findFirst({
-      where: { userId, endedAt: null },
-      orderBy: { startedAt: 'desc' },
-    });
-
-    // Find last processed TimeEntry
-    const lastEntry = await this.prisma.timeEntry.findFirst({
-      where: { userId, source: 'AUTO' },
-      orderBy: { endedAt: 'desc' },
-    });
-
-    // Use 10-minute lookback to ensure idle threshold detection (5min threshold + buffer), bounded by session start
-    let from: Date;
-    if (lastEntry && activeSession) {
-      const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
-      from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
-      console.log(`🔄 Rollup from ${from.toISOString()} (6min lookback, bounded by session)`);
-    } else if (activeSession) {
-      from = activeSession.startedAt;
-      console.log(`🔄 Rollup from session start: ${from.toISOString()}`);
-    } else {
-      from = new Date(now.getTime() - 6 * 60 * 1000);
-      console.log(`🔄 Rollup from 6 minutes ago: ${from.toISOString()}`);
-    }
     
-    try {
-      await this.rollupQueue.add('rollup-user', { userId, from, to: now });
-      console.log(`🔄 Rollup queued for user ${userId} from ${from.toISOString()}`);
-      return { success: true, message: 'Rollup triggered' };
-    } catch (error) {
-      console.log(`⚠️ Redis unavailable, running rollup directly`);
-      await this.rollupService.rollupUserActivity(userId, from, now);
-      return { success: true, message: 'Rollup completed directly' };
-    }
+    // Return immediately, process in background
+    setImmediate(async () => {
+      try {
+        const activeSession = await this.prisma.deviceSession.findFirst({
+          where: { userId, endedAt: null },
+          orderBy: { startedAt: 'desc' },
+        });
+
+        const lastEntry = await this.prisma.timeEntry.findFirst({
+          where: { userId, source: 'AUTO' },
+          orderBy: { endedAt: 'desc' },
+        });
+
+        let from: Date;
+        if (lastEntry && activeSession) {
+          const lookbackTime = new Date(lastEntry.endedAt.getTime() - 6 * 60 * 1000);
+          from = lookbackTime > activeSession.startedAt ? lookbackTime : activeSession.startedAt;
+        } else if (activeSession) {
+          from = activeSession.startedAt;
+        } else {
+          from = new Date(now.getTime() - 6 * 60 * 1000);
+        }
+        
+        try {
+          await this.rollupQueue.add('rollup-user', { userId, from, to: now });
+        } catch (error) {
+          await this.rollupService.rollupUserActivity(userId, from, now);
+        }
+      } catch (error) {
+        console.error('Background rollup error:', error);
+      }
+    });
+    
+    return { success: true, message: 'Rollup triggered' };
   }
 
   async getActiveUsers() {
