@@ -374,7 +374,7 @@ export class RollupService {
       } else {
         consecutiveIdleCount++;
 
-        if (consecutiveIdleCount > idleThresholdMinutes) {
+        if (consecutiveIdleCount >= idleThresholdMinutes) {  // ✅ Changed > to >= for accurate threshold
           entries.push({
             userId: entry.userId,
             startedAt: entry.startedAt,
