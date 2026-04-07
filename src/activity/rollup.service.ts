@@ -84,6 +84,7 @@ export class RollupService {
       
       // Create a set of already-processed minute timestamps
       const processedMinutes = new Set<number>();
+      console.log(`🔍 Found ${existingEntries.length} existing entries in rollup window`);
       for (const entry of existingEntries) {
         let current = new Date(entry.startedAt);
         const end = new Date(entry.endedAt);
@@ -92,6 +93,7 @@ export class RollupService {
           current = addMinutes(current, 1);
         }
       }
+      console.log(`🔍 Total processed minutes to skip: ${processedMinutes.size}`);
       
       const minuteEntries: Array<{
         userId: string;
@@ -104,9 +106,62 @@ export class RollupService {
       for (const bucket of minuteBuckets) {
         if (!isWithinCheckinWindow(bucket.start, rules)) continue;
         
-        // Skip if this minute was already processed
-        if (processedMinutes.has(bucket.start.getTime())) {
-          continue;
+        // Check activity using activeSeconds field (more accurate) or fallback to mouse/key
+        const active = bucket.samples.some((s) => 
+          (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
+          hasActivity(s.mouseDelta, s.keyCount)
+        );
+        
+        // Check if this minute was already processed
+        const alreadyProcessed = processedMinutes.has(bucket.start.getTime());
+        
+        // Find what kind of entry exists for this minute
+        const existingEntry = existingEntries.find(e => {
+          const eStart = new Date(e.startedAt).getTime();
+          const eEnd = new Date(e.endedAt).getTime();
+          const bStart = bucket.start.getTime();
+          return eStart <= bStart && eEnd > bStart;
+        });
+        
+        // Skip logic:
+        // 1. If minute is already ACTIVE and current samples are also ACTIVE -> Skip (prevent reprocessing)
+        // 2. If minute is already IDLE and current samples are also IDLE -> Skip (prevent reprocessing)
+        // 3. If minute is ACTIVE but samples are IDLE -> Process (allow IDLE to replace ACTIVE after threshold)
+        // 4. If minute is IDLE but samples are ACTIVE -> Process (allow real activity to replace IDLE)
+        if (alreadyProcessed && existingEntry) {
+          const existingIsActive = existingEntry.kind === 'ACTIVE';
+          const currentIsActive = active;
+          
+          // Skip only if both are same kind (no state change)
+          if (existingIsActive === currentIsActive) {
+            console.log(`⏭️ Skipping already-processed ${existingEntry.kind} minute: ${bucket.start.toISOString()}`);
+            continue;
+          }
+          
+          // If existing is ACTIVE but current is IDLE, only process if we have enough consecutive idle minutes
+          // This prevents premature conversion to IDLE
+          if (existingIsActive && !currentIsActive) {
+            // Count consecutive idle minutes from this point
+            let consecutiveIdle = 0;
+            for (let i = minuteBuckets.indexOf(bucket); i < minuteBuckets.length; i++) {
+              const b = minuteBuckets[i];
+              const isIdle = !b.samples.some((s) => 
+                (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
+                hasActivity(s.mouseDelta, s.keyCount)
+              );
+              if (isIdle) {
+                consecutiveIdle++;
+              } else {
+                break;
+              }
+            }
+            
+            const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
+            if (consecutiveIdle < idleThresholdMinutes) {
+              console.log(`⏭️ Skipping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
+              continue;
+            }
+          }
         }
         
         // ✅ Check if in break time - mark as break
@@ -121,11 +176,6 @@ export class RollupService {
           continue;
         }
 
-        // Check activity using activeSeconds field (more accurate) or fallback to mouse/key
-        const active = bucket.samples.some((s) => 
-          (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
-          hasActivity(s.mouseDelta, s.keyCount)
-        );
         minuteEntries.push({
           userId,
           startedAt: bucket.start,
