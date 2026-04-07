@@ -172,7 +172,7 @@ export class RollupService {
         for (const newEntry of merged) {
           const entryWithProject = { ...newEntry, projectId: projectId || null };
           
-          // Check for exact match OR overlapping entries of same kind
+          // Check for overlapping entries of same kind and merge them
           const existingOverlap = await tx.timeEntry.findFirst({
             where: {
               userId,
@@ -184,7 +184,24 @@ export class RollupService {
           });
 
           if (existingOverlap) {
-            console.log(`⏭️ Skipping overlapping ${newEntry.kind} entry: ${newEntry.startedAt.toISOString()}-${newEntry.endedAt.toISOString()}`);
+            // Merge: extend the existing entry if new entry extends beyond it
+            const mergedStart = existingOverlap.startedAt < newEntry.startedAt ? existingOverlap.startedAt : newEntry.startedAt;
+            const mergedEnd = existingOverlap.endedAt > newEntry.endedAt ? existingOverlap.endedAt : newEntry.endedAt;
+            
+            // Only update if the merged entry is different
+            if (mergedStart.getTime() !== existingOverlap.startedAt.getTime() || mergedEnd.getTime() !== existingOverlap.endedAt.getTime()) {
+              await tx.timeEntry.update({
+                where: { id: existingOverlap.id },
+                data: {
+                  startedAt: mergedStart,
+                  endedAt: mergedEnd,
+                },
+              });
+              const duration = Math.floor((mergedEnd.getTime() - mergedStart.getTime()) / 60000);
+              console.log(`🔄 Merged ${newEntry.kind}: ${mergedStart.toISOString()}-${mergedEnd.toISOString()} (${duration}min)`);
+            } else {
+              console.log(`⏭️ Skipping - already covered by existing ${newEntry.kind} entry`);
+            }
             continue;
           }
 
