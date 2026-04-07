@@ -138,8 +138,30 @@ export class RollupService {
             continue;
           }
           
-          // ✅ Allow IDLE to replace ACTIVE - applyIdleThreshold will handle the threshold logic
-          // No need to check consecutive idle minutes here
+          // If existing is ACTIVE but current is IDLE, only process if we have enough consecutive idle minutes
+          // This prevents premature conversion to IDLE
+          if (existingIsActive && !currentIsActive) {
+            // Count consecutive idle minutes from this point
+            let consecutiveIdle = 0;
+            for (let i = minuteBuckets.indexOf(bucket); i < minuteBuckets.length; i++) {
+              const b = minuteBuckets[i];
+              const isIdle = !b.samples.some((s) => 
+                (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
+                hasActivity(s.mouseDelta, s.keyCount)
+              );
+              if (isIdle) {
+                consecutiveIdle++;
+              } else {
+                break;
+              }
+            }
+            
+            const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
+            if (consecutiveIdle < idleThresholdMinutes) {
+              console.log(`⏭️ Skiping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
+              continue;
+            }
+          }
         }
         
         // ✅ Check if in break time - mark as break
@@ -172,36 +194,17 @@ export class RollupService {
         for (const newEntry of merged) {
           const entryWithProject = { ...newEntry, projectId: projectId || null };
           
-          // Check for overlapping entries of same kind and merge them
-          const existingOverlap = await tx.timeEntry.findFirst({
+          const existingExact = await tx.timeEntry.findFirst({
             where: {
               userId,
               source: 'AUTO',
               kind: newEntry.kind,
-              startedAt: { lt: newEntry.endedAt },
-              endedAt: { gt: newEntry.startedAt },
+              startedAt: newEntry.startedAt,
+              endedAt: newEntry.endedAt,
             },
           });
 
-          if (existingOverlap) {
-            // Merge: extend the existing entry if new entry extends beyond it
-            const mergedStart = existingOverlap.startedAt < newEntry.startedAt ? existingOverlap.startedAt : newEntry.startedAt;
-            const mergedEnd = existingOverlap.endedAt > newEntry.endedAt ? existingOverlap.endedAt : newEntry.endedAt;
-            
-            // Only update if the merged entry is different
-            if (mergedStart.getTime() !== existingOverlap.startedAt.getTime() || mergedEnd.getTime() !== existingOverlap.endedAt.getTime()) {
-              await tx.timeEntry.update({
-                where: { id: existingOverlap.id },
-                data: {
-                  startedAt: mergedStart,
-                  endedAt: mergedEnd,
-                },
-              });
-              const duration = Math.floor((mergedEnd.getTime() - mergedStart.getTime()) / 60000);
-              console.log(`🔄 Merged ${newEntry.kind}: ${mergedStart.toISOString()}-${mergedEnd.toISOString()} (${duration}min)`);
-            } else {
-              console.log(`⏭️ Skipping - already covered by existing ${newEntry.kind} entry`);
-            }
+          if (existingExact) {
             continue;
           }
 
@@ -371,7 +374,7 @@ export class RollupService {
       } else {
         consecutiveIdleCount++;
 
-        if (consecutiveIdleCount >= idleThresholdMinutes) {  // ✅ Changed > to >= for accurate threshold
+        if (consecutiveIdleCount > idleThresholdMinutes) {
           entries.push({
             userId: entry.userId,
             startedAt: entry.startedAt,
