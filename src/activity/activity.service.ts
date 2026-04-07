@@ -556,38 +556,7 @@ export class ActivityService {
       breakSeconds = calculatedBreakSeconds; // Update for logging
     }
 
-    console.log(`\n========== 📊 MY STATS DEBUG ==========`);
-    console.log(`🔍 Debug Info:`);
-    console.log(`   User ID: ${userId}`);
-    console.log(`   Today (Local): ${new Date().toISOString()}`);
-    console.log(`   Today (UTC): ${today.toISOString()}`);
-    console.log(`   Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
-    console.log(`\n⏰ Session Info:`);
-    console.log(`   Check-in: ${checkinTime?.toISOString() || 'Not checked in'}`);
-    console.log(`   Checkout: ${checkoutTime?.toISOString() || 'Still active'}`);
-    console.log(`\n⏱️  Time Entries (from TimeEntry table):`);
-    console.log(`   Active Time: ${activeSeconds}s (${Math.floor(activeSeconds/60)}m)`);
-    console.log(`   Idle Time: ${idleSeconds}s (${Math.floor(idleSeconds/60)}m)`);
-    console.log(`   Break Time: ${breakSeconds}s (${Math.floor(breakSeconds/60)}m)`);
-    console.log(`   Total Time: ${totalSeconds}s (${Math.floor(totalSeconds/60)}m)`);
-    console.log(`\n📈 Activity Rate (PRODUCTION LOGIC with Grace Period):`);
-    console.log(`   Total Samples: ${samplesWithData}`);
-    console.log(`   Active Seconds (from samples): ${totalActiveSeconds}`);
-    console.log(`   Elapsed Since Checkin: ${firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) : 0}s`);
-    console.log(`   Break Seconds (calculated from schedule): ${breakSeconds}s`);
-    const workSecs = firstSession ? Math.floor((now.getTime() - firstSession.startedAt.getTime()) / 1000) - breakSeconds : 0;
-    const GRACE_PERIOD_SECONDS = 30;
-    const workSecsAfterGrace = Math.max(0, workSecs - GRACE_PERIOD_SECONDS);
-    const expectedTotal = Math.floor(workSecsAfterGrace / 5) * 5;
-    const inactiveSecs = Math.max(0, expectedTotal - totalActiveSeconds);
-    console.log(`   Work Seconds (elapsed - break): ${workSecs}s`);
-    console.log(`   Grace Period (${GRACE_PERIOD_SECONDS}s): ${workSecs < GRACE_PERIOD_SECONDS ? 'ACTIVE - showing 100%' : 'EXPIRED - excluded from calculation'}`);
-    console.log(`   Work Seconds After Grace: ${workSecsAfterGrace}s`);
-    console.log(`   Expected Total Seconds: ${expectedTotal}s`);
-    console.log(`   Inactive Seconds: ${inactiveSecs}s`);
-    console.log(`   Formula: ${workSecs < GRACE_PERIOD_SECONDS ? '100% (grace period)' : `100 - (${inactiveSecs} / ${expectedTotal}) × 100`}`);
-    console.log(`   Result: ${activityRate}%`);
-    console.log(`========================================\n`);
+    // Removed verbose debug logs for cleaner output
 
     return {
       checkinTime,
