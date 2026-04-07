@@ -222,22 +222,9 @@ export class RollupService {
           });
 
           // If new entry conflicts with existing entries of opposite kind:
-          // - ACTIVE should NOT overwrite confirmed IDLE (IDLE that crossed threshold)
+          // - ACTIVE should overwrite IDLE (real activity takes priority)
           // - IDLE should NOT overwrite ACTIVE (preserve real activity)
-          if (newEntry.kind === 'ACTIVE' && trueConflicts.length > 0) {
-            const hasConfirmedIdle = trueConflicts.some(c => {
-              if (c.kind !== 'IDLE') return false;
-              const durationMinutes = Math.floor((c.endedAt.getTime() - c.startedAt.getTime()) / 60000);
-              const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
-              return durationMinutes >= idleThresholdMinutes;
-            });
-            
-            if (hasConfirmedIdle) {
-              console.log(`⏭️ ACTIVE cannot overwrite confirmed IDLE, skipping: ${newEntry.startedAt.toISOString()}`);
-              continue;
-            }
-          }
-          
+          // But allow IDLE to be added in new time periods (no full overlap)
           if (newEntry.kind === 'IDLE' && trueConflicts.length > 0) {
             // Check if there's a conflicting ACTIVE that fully covers this IDLE period
             const fullyOverlapped = trueConflicts.some(c => 
@@ -372,7 +359,7 @@ export class RollupService {
       } else {
         consecutiveIdleCount++;
 
-        if (consecutiveIdleCount >= idleThresholdMinutes) {  // ✅ Use >= for accurate threshold
+        if (consecutiveIdleCount > idleThresholdMinutes) {
           entries.push({
             userId: entry.userId,
             startedAt: entry.startedAt,
