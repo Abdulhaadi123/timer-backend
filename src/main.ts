@@ -27,12 +27,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  // Log all incoming requests
-  app.use((req, res, next) => {
-    console.log(`📥 ${req.method} ${req.url}`);
-    console.log(`🔑 Authorization: ${req.headers.authorization ? req.headers.authorization.substring(0, 30) + '...' : 'NONE'}`);
-    next();
-  });
+  // Removed verbose request logging for cleaner output
 
   // Serve static files from public/downloads directory
   const downloadsPath = join(__dirname, '..', 'public', 'downloads');
