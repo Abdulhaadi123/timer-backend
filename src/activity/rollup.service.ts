@@ -138,30 +138,8 @@ export class RollupService {
             continue;
           }
           
-          // If existing is ACTIVE but current is IDLE, only process if we have enough consecutive idle minutes
-          // This prevents premature conversion to IDLE
-          if (existingIsActive && !currentIsActive) {
-            // Count consecutive idle minutes from this point
-            let consecutiveIdle = 0;
-            for (let i = minuteBuckets.indexOf(bucket); i < minuteBuckets.length; i++) {
-              const b = minuteBuckets[i];
-              const isIdle = !b.samples.some((s) => 
-                (s.activeSeconds !== undefined && s.activeSeconds !== null && s.activeSeconds > 0) ||
-                hasActivity(s.mouseDelta, s.keyCount)
-              );
-              if (isIdle) {
-                consecutiveIdle++;
-              } else {
-                break;
-              }
-            }
-            
-            const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
-            if (consecutiveIdle < idleThresholdMinutes) {
-              console.log(`⏭️ Skiping IDLE conversion - only ${consecutiveIdle} consecutive idle minutes (need ${idleThresholdMinutes}): ${bucket.start.toISOString()}`);
-              continue;
-            }
-          }
+          // ✅ Allow IDLE to replace ACTIVE - applyIdleThreshold will handle the threshold logic
+          // No need to check consecutive idle minutes here
         }
         
         // ✅ Check if in break time - mark as break
