@@ -57,11 +57,26 @@ export class UsersService {
 
     if (!user) return null;
 
+    const avatarPath = user.employee_profiles_employee_profiles_user_idTousers?.avatar_path;
+    let avatarUrl = null;
+    
+    if (avatarPath) {
+      // If already full URL, use as is
+      if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+        avatarUrl = avatarPath;
+      } else {
+        // Convert relative path to full S3 URL
+        const s3Bucket = process.env.AWS_S3_BUCKET || 'cvbuckets3.11';
+        const s3Region = process.env.AWS_REGION || 'us-east-2';
+        avatarUrl = `https://${s3Bucket}.s3.${s3Region}.amazonaws.com/${avatarPath}`;
+      }
+    }
+
     return {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
-      avatarUrl: user.employee_profiles_employee_profiles_user_idTousers?.avatar_path || null,
+      avatarUrl,
     };
   }
 
