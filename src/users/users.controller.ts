@@ -7,6 +7,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
+  @Get('me/profile')
+  async getMyProfile(@Request() req) {
+    const userId = req.user.userId
+    const profile = await this.usersService.getUserProfile(userId)
+    return profile
+  }
+
   @Get()
   async getUsers(@Request() req) {
     return this.usersService.getUsers(req.user.orgId);

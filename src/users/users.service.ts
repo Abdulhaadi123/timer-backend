@@ -47,6 +47,24 @@ export class UsersService {
     };
   }
 
+  async getUserProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee_profiles_employee_profiles_user_idTousers: true,
+      },
+    });
+
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      avatarUrl: user.employee_profiles_employee_profiles_user_idTousers?.avatar_path || null,
+    };
+  }
+
   async createUser(data: {
     email: string;
     password: string;
