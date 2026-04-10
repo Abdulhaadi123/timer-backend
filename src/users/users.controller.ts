@@ -9,7 +9,7 @@ export class UsersController {
 
   @Get('me/profile')
   async getMyProfile(@Request() req) {
-    const userId = req.user.userId
+    const userId = req.user.id
     const profile = await this.usersService.getUserProfile(userId)
     return profile
   }
