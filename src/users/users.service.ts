@@ -2,10 +2,22 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  private s3Client: S3Client;
+
+  constructor(private prisma: PrismaService) {
+    this.s3Client = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-2',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+      },
+    });
+  }
 
   async getUsers(orgId: string) {
     const users = await this.prisma.user.findMany({
@@ -61,14 +73,23 @@ export class UsersService {
     let avatarUrl = null;
     
     if (avatarPath) {
-      // If already full URL, use as is
+      // If already full URL with signature, use as is
       if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
         avatarUrl = avatarPath;
       } else {
-        // Convert relative path to full S3 URL
-        const s3Bucket = process.env.AWS_S3_BUCKET || 'cvbuckets3.11';
-        const s3Region = process.env.AWS_REGION || 'us-east-2';
-        avatarUrl = `https://${s3Bucket}.s3.${s3Region}.amazonaws.com/${avatarPath}`;
+        // Generate presigned URL for private S3 bucket
+        try {
+          const bucket = process.env.AWS_S3_BUCKET_PICTURES || 'hrms-pictures';
+          const command = new GetObjectCommand({
+            Bucket: bucket,
+            Key: avatarPath,
+          });
+          // URL valid for 24 hours
+          avatarUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 86400 });
+        } catch (error) {
+          console.error('Failed to generate presigned URL:', error);
+          avatarUrl = null;
+        }
       }
     }
 
