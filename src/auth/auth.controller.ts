@@ -17,6 +17,11 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  @Post('refresh')
+  async refresh(@Body() body: { refreshToken: string }) {
+    return this.authService.refreshTokens(body.refreshToken);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getMe(@Request() req) {
