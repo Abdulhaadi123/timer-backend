@@ -11,16 +11,23 @@ import { UsersModule } from './users/users.module';
 import { WorkerModule } from './worker/worker.module';
 import { AppController } from './app.controller';
 
+const isRedisEnabled = process.env.REDIS_ENABLED !== 'false';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD || undefined,
-      },
-    }),
+    // Only register BullMQ if Redis is enabled
+    ...(isRedisEnabled
+      ? [
+          BullModule.forRoot({
+            connection: {
+              host: process.env.REDIS_HOST || 'localhost',
+              port: parseInt(process.env.REDIS_PORT || '6379'),
+              password: process.env.REDIS_PASSWORD || undefined,
+            },
+          }),
+        ]
+      : []),
     PrismaModule,
     AuthModule,
     ActivityModule,
@@ -28,7 +35,8 @@ import { AppController } from './app.controller';
     ScreenshotsModule,
     ProjectsModule,
     UsersModule,
-    WorkerModule,
+    // Only register WorkerModule if Redis is enabled
+    ...(isRedisEnabled ? [WorkerModule] : []),
   ],
   controllers: [AppController],
 })

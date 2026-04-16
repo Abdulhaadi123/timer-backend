@@ -11,9 +11,18 @@ interface MinuteBucket {
 
 @Injectable()
 export class RollupService {
+  private rollupLocks = new Map<string, boolean>();
+  
   constructor(private prisma: PrismaService) {}
 
   async rollupUserActivity(userId: string, from: Date, to: Date, projectId?: string) {
+    // Prevent concurrent rollups for the same user
+    if (this.rollupLocks.get(userId)) {
+      console.log(`⏭️ Rollup already in progress for user ${userId}, skipping duplicate`);
+      return;
+    }
+    this.rollupLocks.set(userId, true);
+    
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -163,7 +172,40 @@ export class RollupService {
         });
       }
 
-      const entries = this.applyIdleThreshold(minuteEntries, rules.idleThresholdSeconds);
+      // Determine initial idle count from preceding entries to maintain idle state across rollup calls
+      let initialIdleCount = 0;
+      const idleThresholdMinutes = Math.floor(rules.idleThresholdSeconds / 60);
+      
+      if (minuteEntries.length > 0) {
+        const firstMinuteStart = minuteEntries[0].startedAt;
+        
+        // Check the MOST RECENT entry (any kind) ending right before our first minute
+        // Only continue idle count if the last entry was IDLE (not ACTIVE)
+        const precedingEntry = await this.prisma.timeEntry.findFirst({
+          where: {
+            userId,
+            source: 'AUTO',
+            endedAt: {
+              gte: new Date(firstMinuteStart.getTime() - 60000),
+              lte: firstMinuteStart,
+            },
+          },
+          orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }],
+        });
+        
+        if (precedingEntry && precedingEntry.kind === 'IDLE') {
+          const precedingIdleMinutes = Math.floor(
+            (precedingEntry.endedAt.getTime() - precedingEntry.startedAt.getTime()) / 60000
+          );
+          // Ensure count is at least at threshold so subsequent idle minutes are immediately IDLE
+          initialIdleCount = Math.max(precedingIdleMinutes, idleThresholdMinutes);
+          console.log(`🔄 Preceding IDLE entry found (${precedingIdleMinutes}min), continuing with idle count=${initialIdleCount}`);
+        } else if (precedingEntry) {
+          console.log(`🔄 Preceding entry is ${precedingEntry.kind}, idle count starts at 0 (threshold reset)`);
+        }
+      }
+
+      const entries = this.applyIdleThreshold(minuteEntries, rules.idleThresholdSeconds, initialIdleCount);
       const merged = this.mergeContiguous(entries);
 
       await this.prisma.$transaction(async (tx) => {
@@ -305,6 +347,8 @@ export class RollupService {
     } catch (error) {
       console.error('❌ Rollup failed:', error);
       throw error;
+    } finally {
+      this.rollupLocks.delete(userId);
     }
   }
 
@@ -333,11 +377,16 @@ export class RollupService {
   private applyIdleThreshold(
     minuteEntries: Array<{ userId: string; startedAt: Date; endedAt: Date; hasActivity: boolean }>,
     idleThresholdSeconds: number,
+    initialIdleCount: number = 0,
   ): Array<{ userId: string; startedAt: Date; endedAt: Date; kind: 'ACTIVE' | 'IDLE'; source: 'AUTO' }> {
     const entries: Array<{ userId: string; startedAt: Date; endedAt: Date; kind: 'ACTIVE' | 'IDLE'; source: 'AUTO' }> = [];
     const idleThresholdMinutes = Math.floor(idleThresholdSeconds / 60);
-    let consecutiveIdleCount = 0;
+    let consecutiveIdleCount = initialIdleCount;
     let pendingIdleEntries: Array<typeof entries[0]> = [];
+
+    if (initialIdleCount > 0) {
+      console.log(`🔄 applyIdleThreshold starting with consecutiveIdleCount=${initialIdleCount} (continuing from preceding IDLE)`);
+    }
 
     for (let i = 0; i < minuteEntries.length; i++) {
       const entry = minuteEntries[i];
