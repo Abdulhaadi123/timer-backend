@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +18,7 @@ interface ActivityBatchItem {
 export class ActivityService {
   constructor(
     private prisma: PrismaService,
-    @InjectQueue('activity-rollup') private rollupQueue: Queue,
+    @Optional() @InjectQueue('activity-rollup') private rollupQueue: Queue,
     private rollupService: RollupService,
   ) {}
 
@@ -86,11 +86,15 @@ export class ActivityService {
           const from = oldSession.startedAt;
           const to = new Date();
           
-          try {
-            await this.rollupQueue.add('rollup-user', { userId: oldSession.userId, from, to });
-            console.log(`🔄 Queued rollup for unclosed session ${oldSession.id}`);
-          } catch (error) {
-            console.log(`⚠️ Redis unavailable, running rollup directly for unclosed session`);
+          if (this.rollupQueue) {
+            try {
+              await this.rollupQueue.add('rollup-user', { userId: oldSession.userId, from, to });
+              console.log(`🔄 Queued rollup for unclosed session ${oldSession.id}`);
+            } catch (error) {
+              console.log(`⚠️ Redis unavailable, running rollup directly for unclosed session`);
+              await this.rollupService.rollupUserActivity(oldSession.userId, from, to);
+            }
+          } else {
             await this.rollupService.rollupUserActivity(oldSession.userId, from, to);
           }
         }
@@ -128,11 +132,15 @@ export class ActivityService {
     const from = session.startedAt;
     const to = new Date();
 
-    try {
-      await this.rollupQueue.add('rollup-user', { userId: session.userId, from, to });
-      console.log(`🔄 Queued final rollup for session ${sessionId}`);
-    } catch (error) {
-      console.log(`⚠️ Redis unavailable, running final rollup directly`);
+    if (this.rollupQueue) {
+      try {
+        await this.rollupQueue.add('rollup-user', { userId: session.userId, from, to });
+        console.log(`🔄 Queued final rollup for session ${sessionId}`);
+      } catch (error) {
+        console.log(`⚠️ Redis unavailable, running final rollup directly`);
+        await this.rollupService.rollupUserActivity(session.userId, from, to);
+      }
+    } else {
       await this.rollupService.rollupUserActivity(session.userId, from, to);
     }
 
@@ -268,11 +276,15 @@ export class ActivityService {
       
       const to = lastSampleTime;
 
-      try {
-        await this.rollupQueue.add('rollup-user', { userId, from, to, projectId });
-        console.log(`🔄 Queued rollup job for user ${userId} with project ${projectId || 'None'}`);
-      } catch (error) {
-        console.log(`⚠️ Redis unavailable, running rollup directly`);
+      if (this.rollupQueue) {
+        try {
+          await this.rollupQueue.add('rollup-user', { userId, from, to, projectId });
+          console.log(`🔄 Queued rollup job for user ${userId} with project ${projectId || 'None'}`);
+        } catch (error) {
+          console.log(`⚠️ Redis unavailable, running rollup directly`);
+          await this.rollupService.rollupUserActivity(userId, from, to, projectId);
+        }
+      } else {
         await this.rollupService.rollupUserActivity(userId, from, to, projectId);
       }
     }
@@ -309,9 +321,13 @@ export class ActivityService {
           from = new Date(now.getTime() - 6 * 60 * 1000);
         }
         
-        try {
-          await this.rollupQueue.add('rollup-user', { userId, from, to: now });
-        } catch (error) {
+        if (this.rollupQueue) {
+          try {
+            await this.rollupQueue.add('rollup-user', { userId, from, to: now });
+          } catch (error) {
+            await this.rollupService.rollupUserActivity(userId, from, now);
+          }
+        } else {
           await this.rollupService.rollupUserActivity(userId, from, now);
         }
       } catch (error) {
