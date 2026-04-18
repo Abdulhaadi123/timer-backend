@@ -179,18 +179,17 @@ export class RollupService {
       if (minuteEntries.length > 0) {
         const firstMinuteStart = minuteEntries[0].startedAt;
         
-        // Check the MOST RECENT entry (any kind) ending right before our first minute
-        // Only continue idle count if the last entry was IDLE (not ACTIVE)
+        // Find the entry that covers the time right before firstMinuteStart
+        // Or the most recently ended entry before it
         const precedingEntry = await this.prisma.timeEntry.findFirst({
           where: {
             userId,
             source: 'AUTO',
-            endedAt: {
-              gte: new Date(firstMinuteStart.getTime() - 60000),
-              lte: firstMinuteStart,
+            startedAt: {
+              lt: firstMinuteStart,
             },
           },
-          orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }],
+          orderBy: { endedAt: 'desc' },
         });
         
         if (precedingEntry && precedingEntry.kind === 'IDLE') {
